@@ -83,19 +83,17 @@ For Java examples, see [Example.java](test/uio/Example.java).
 (delete "file:///path/to")                                  ; => nil
 
 ; Listing directory contents
-(->> (ls "s3://bucket/path/to")                             ; returns a lazy sequence. Potentially,
+(->> (ls "file:///path/to")                                 ; returns a lazy sequence. Potentially,
      (take 4))                                              ; ... a very large one, thus, using
                                                             ; ... (take ...) is not a bad idea.
                                                             ;
-; => [{:url     "s3://bucket/path/to/some-dir"              ; a dir
+; => [{:url     "file:///path/to/some-dir"                  ; a dir
 ;      :dir     true}
-;     {:url     "s3://bucket/path/to/file1.txt"             ; a file (has :size)
+;     {:url     "file:///to/file.txt"                       ; a file (has :size)
 ;      :size    123}
-;     {:url     "s3://bucket/path/to/file2.txt"             ; a symlink to a file
-;      :symlink true
-;      :size    456}]
-;     {:url     "s3://bucket/path/to/dir"                   ; a symlink to a dir
-;      :symlink true}]
+;     {:url     "file:///path/to/file2.txt"                 ; a symlink
+;      :symlink "file:///path/to/file.txt"
+;      :size    123}]
 
 ; Combine with `filter` and `map` to get the output you want
 (->> (ls "s3://bucket/path/to/")
