@@ -4,8 +4,8 @@
   (:import [clojure.lang IFn IPersistentMap Keyword]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream]
            [java.net URI URLEncoder]
-           [java.security DigestInputStream DigestOutputStream MessageDigest Security]
-           [uio.fs Streams$CountedOutputStream Streams$NullOutputStream Streams$CountedInputStream]))
+           [java.security Security]
+           [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream]))
 
 (def default-delimiter "/")
 (def default-opts-ls   {:recurse false})
@@ -265,7 +265,7 @@
        (jio/copy is os))))
 
 ; other streams functions
-(defn ^OutputStream nil-os []
+(defn ^OutputStream ->nil-os []
   (Streams$NullOutputStream.))
 
 
@@ -288,18 +288,18 @@
 ; => nil
 ;
 ; Example (advanced): measure compressed VS uncompressed ratio
-; (with-open [os-file (counted-os (jio/output-stream "/path/to/file.txt.gz"))
-;             os-gz   (counted-os (GZIPOutputStream. os-file))
+; (with-open [os-file (->countable (jio/output-stream (->nil-os)))
+;             os-gz   (->countable (ext-encode-os :gz os-file))
 ;             w       (jio/writer os-gz)]
 ;
-;   ; ==> (.write [Writer                         --> w
-;   ;               [CountedOutputStream          --> os-gz
-;   ;                 [GZIPOutputStream
-;   ;                   [CountedOutputStream      --> os-file
-;   ;                     [FileOutputStream]]]]]
+;   ; ==> (.write {Writer                           --> w
+;   ;               {CountableOutputStream          --> os-gz
+;   ;                 {GZIPOutputStream
+;   ;                   {CountableOutputStream      --> os-file
+;   ;                     {NullOutputStream}}}}}
 ;
-;   (doseq [_ (range 1000)]
-;     (.write w (str (Math/random) "\n")))
+;   (doseq [i (range 10000)]
+;     (.write w (str i "\n")))
 ;
 ;   ; Close the outer os/writer to flush all underlying os/writers.
 ;   ; In this way we can get final counters, while still in `with-open` block.
@@ -308,39 +308,49 @@
 ;   {:original   (count os-gz)
 ;    :compressed (count os-file)})
 ;
-; => {:original 19266, :compressed 9374}
+;  => {:original 48890, :compressed 22196}
 ;
-(defn counted-is [^InputStream  is]        (Streams$CountedInputStream.  is))
-(defn counted-os [^OutputStream os-or-nil] (Streams$CountedOutputStream. os-or-nil))
+(defn ->countable [^Closeable is-or-os]
+  (cond (instance? InputStream  is-or-os) (Streams$CountableInputStream.  is-or-os)
+        (instance? OutputStream is-or-os) (Streams$CountableOutputStream. is-or-os)
+        :else                             (die (str "Expected InputStream or OutputStream, but got "
+                                                    (if (nil? is-or-os)
+                                                      "nil"
+                                                      (.getName (type is-or-os)))))))
 
 ; Adding digest calculation to existing input and output streams.
 ;
 ; Examples:
-; (with-open [is (digest-is "MD5" (ByteArrayInputStream. (.getBytes "hello world")))]
+; (with-open [is (->digestible "MD5" (bytes->is (.getBytes "hello world")))]
 ;   (loop []
-;     (if-not (neg? (.read is))
+;     (if (not= -1 (.read is))
 ;       (recur)))
-;   (hex (digest is)))
-; => "5EB63BBBE01EEED093CB22BB8F5ACDC3"
+;   (javax.xml.bind.DatatypeConverter/printHexBinary (close-and-digest is)))
+;  => "5EB63BBBE01EEED093CB22BB8F5ACDC3"
 ;
-; (with-open [os (digest-os "MD5" (NullOutputStream.))]
+; (with-open [os (->digestible "MD5" (->nil-os))]
 ;   (.write os (.getBytes "hello world"))
-;   (hex (digest os)))
+;   (javax.xml.bind.DatatypeConverter/printHexBinary (close-and-digest os)))
 ; => "5EB63BBBE01EEED093CB22BB8F5ACDC3"
 ;
 ; $ echo -n "hello world" | md5
 ; 5eb63bbbe01eeed093cb22bb8f5acdc3
 ;
-(defn digest-is [^String algorithm ^InputStream  is] (DigestInputStream.  is (MessageDigest/getInstance algorithm)))
-(defn digest-os [^String algorithm ^OutputStream os] (DigestOutputStream. os (MessageDigest/getInstance algorithm)))
-(defn digest    [^Closeable is-or-os]                (.digest (.getMessageDigest is-or-os)))
+(defn ->digestible [^String algorithm ^Closeable is-or-os]
+  (cond (instance? InputStream  is-or-os) (Streams$DigestibleInputStream.  algorithm is-or-os)
+        (instance? OutputStream is-or-os) (Streams$DigestibleOutputStream. algorithm is-or-os)
+        :else                             (die (str "Expected InputStream or OutputStream, but got "
+                                                    (if (nil? is-or-os)
+                                                      "nil"
+                                                      (.getName (type is-or-os)))))))
+
+(defn close-and-digest [^Closeable is-or-os] (.closeAndDigest is-or-os))
 
 ; ["MD2" "MD5" "SHA" "SHA-224" "SHA-256" "SHA-384" "SHA-512"] <-- for JDK 1.8.0_121-b13
-(def available-digest-algorithms
-  (for [p (Security/getProviders)
-        s (.getServices p)
-        :when (= "MessageDigest" (.getType s))]
-    (.getAlgorithm s)))
+(def available-digest-algorithms (for [p (Security/getProviders)
+                                       s (.getServices p)
+                                       :when (= "MessageDigest" (.getType s))]
+                                   (.getAlgorithm s)))
 
 ; Rest of Public API
 (defn with-fn [config f]

@@ -21,12 +21,9 @@
 (defmacro with [config & body]
   `(with-fn ~config (fn [] ~@body)))
 
-; helper fns
-(def is->bytes            i/is->bytes)
-(def with-baos->bytes     i/with-baos->bytes)
-
 ; URL manipulation
 (def ->url                i/->url)
+(def normalize            i/normalize)
 (def scheme               i/scheme)
 (def host                 i/host)
 (def port                 i/port)
@@ -40,6 +37,16 @@
 (def ends-with-delimiter? i/ends-with-delimiter?)
 
 (def default-delimiter    i/default-delimiter)
+
+; stream helper fns
+(def is->bytes            i/is->bytes)
+(def bytes->is            i/bytes->is)
+(def with-baos->bytes     i/with-baos->bytes)
+
+(def ->nil-os             i/->nil-os)
+(def ->countable          i/->countable)                    ; use with (count ...)
+(def ->digestible         i/->digestible)                   ; use with (close-and-digest ...)
+(def close-and-digest     i/close-and-digest)
 
 ; TODO consider replacing the above with something like:
 ; (defmacro pullall [ns]
