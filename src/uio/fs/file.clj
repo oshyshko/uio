@@ -53,7 +53,7 @@
                    (catch Exception e             (die "Couldn't list files for" {:url url} e))))
 
                  ; apply the fn with starting dir
-                (.replaceAll url "/+$" ""))))
+                (normalize url))))
 
 ; TODO consider removing or moving elsewhere
 (defn path->url   ^String [^String path]  (str (.toURI (File. path))))

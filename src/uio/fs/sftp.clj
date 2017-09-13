@@ -168,7 +168,10 @@
                                :size (.getSize (.getAttrs %))}])))))
 
         ; fn args -- starting dir
-        (str (.replaceAll url "/+$" "") default-delimiter)
+        (let [normalized-url (normalize url)]
+          (if (str/ends-with? normalized-url default-delimiter)
+            normalized-url
+            (str default-delimiter)))
         z)
 
       ; close session/channel upon reaching the end of the sequence (without waiting for GC).

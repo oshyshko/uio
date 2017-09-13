@@ -18,7 +18,8 @@
 ;                     "/some-dir/file.txt"           <-- path
 ;                      "some-dir/file.txt"           <-- path-no-slash
 ;
-(defn ->url         ^URI     [^String url] (-> url URI.))
+(defn ->url         ^URI     [^String url] (-> url URI. .normalize))
+(defn normalize     ^String  [^String url] (-> url ->url str))
 (defn scheme        ^Keyword [^String url] (-> url ->url .getScheme keyword))
 (defn host          ^String  [^String url] (-> url ->url .getHost))
 (defn port          ^String  [^String url] (let [p (-> url ->url .getPort)]
