@@ -1,6 +1,8 @@
 (ns uio.test-uio
   (:require [uio.uio :refer :all]
-            [uio.impl :refer [url->ext+s->s intercalate-with-dirs ensure-has-no-trailing-slash]]
+            [uio.impl :refer [ensure-has-no-trailing-slash
+                              intercalate-with-dirs
+                              url->ext+s->s]]
             [midje.sweet :refer :all])
   (:import (java.util.zip GZIPOutputStream)
            (org.apache.commons.compress.compressors CompressorStreamFactory)))
@@ -11,6 +13,13 @@
   (port          "foo://user@host:8080/some-dir/file.txt?arg=value") => 8080
   (path          "foo://user@host:8080/some-dir/file.txt?arg=value") => "/some-dir/file.txt"
   (path-no-slash "foo://user@host:8080/some-dir/file.txt?arg=value") => "some-dir/file.txt"
+
+  (normalize     "file:///")                                         => "file:///"
+  (normalize     "file:////")                                        => "file:///"
+  (normalize     "file://///")                                       => "file:///"
+  (normalize     "file://host/path/to")                              => "file://host/path/to"
+  (normalize     "file://host/path/to/")                             => "file://host/path/to/"
+  (normalize     "file://host/path/to//")                            => "file://host/path/to/"
 
   (ensure-has-no-trailing-slash "test")                              => "test"
   (ensure-has-no-trailing-slash "test/")                             => "test"
@@ -105,3 +114,5 @@
                                                          {:url "456/456/3.txt"}
                                                          {:url "456/5.txt"}
                                                          {:url "789.txt"}])
+
+(facts "Normalize works")
