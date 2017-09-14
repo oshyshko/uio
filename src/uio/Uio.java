@@ -29,19 +29,16 @@ public class Uio {
     private static final IFn LS     = var("uio.uio/ls");
     private static final IFn MKDIR  = var("uio.uio/mkdir");
 
-    public static InputStream       from(String url)                           { return from(url, opts()); }
-    public static InputStream decodeFrom(String url)                           { return (InputStream) FROM_S.invoke(url); }
-    public static InputStream       from(String url, Map<String, Object> opts) { return (InputStream)   FROM.invoke(url, s2o_k2o(opts)); }
-    public static OutputStream        to(String url)                           { return to(url, opts()); }
-    public static OutputStream  encodeTo(String url)                           { return (OutputStream)  TO_S.invoke(url); }
-    public static OutputStream        to(String url, Map<String, Object> opts) { return (OutputStream)    TO.invoke(url, s2o_k2o(opts)); }
-    public static long              size(String url)                           { return (long)          SIZE.invoke(url); }
-    public static boolean         exists(String url)                           { return (boolean)     EXISTS.invoke(url); }
-    public static void            delete(String url)                           {                      DELETE.invoke(url); }
-    public static void             mkdir(String url)                           {                       MKDIR.invoke(url); }
-    public static void              copy(String fromUrl, String toUrl)         {                        COPY.invoke(fromUrl, toUrl); }
-
-    public static Iterable<Entry> ls(String url)                     { return ls(url, opts()); }
+    public static InputStream       from(String url)                       { return (InputStream)   FROM.invoke(url); }
+    public static InputStream decodeFrom(String url)                       { return (InputStream) FROM_S.invoke(url); }
+    public static OutputStream  encodeTo(String url)                       { return (OutputStream)  TO_S.invoke(url); }
+    public static OutputStream        to(String url)                       { return (OutputStream)    TO.invoke(url); }
+    public static long              size(String url)                       { return (long)          SIZE.invoke(url); }
+    public static boolean         exists(String url)                       { return (boolean)     EXISTS.invoke(url); }
+    public static void            delete(String url)                       {                      DELETE.invoke(url); }
+    public static void             mkdir(String url)                       {                       MKDIR.invoke(url); }
+    public static void              copy(String fromUrl, String toUrl)     {                        COPY.invoke(fromUrl, toUrl); }
+    public static Iterable<Entry> ls(String url)                           { return ls(url, opts()); }
 
     public static Iterable<Entry> ls(String url, Map<String, Object> opts) {
         return () -> ((List<Map<Keyword, Object>>) LS.invoke(url, s2o_k2o(opts)))
