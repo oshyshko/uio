@@ -19,7 +19,11 @@
 ;                     "/some-dir/file.txt"           <-- path
 ;                      "some-dir/file.txt"           <-- path-no-slash
 ;
-(defn ->url         ^URI     [^String url] (-> url URI. .normalize))
+(defn ->url         ^URI     [^String url] (let [n (-> url URI. .normalize)]
+                                             (if (str/ends-with? n ":/")
+                                               (str n "//")
+                                               n)))
+
 (defn normalize     ^String  [^String url] (-> url ->url str))
 (defn scheme        ^Keyword [^String url] (-> url ->url .getScheme keyword))
 (defn host          ^String  [^String url] (-> url ->url .getHost))
