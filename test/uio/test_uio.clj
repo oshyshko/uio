@@ -114,5 +114,3 @@
                                                          {:url "456/456/3.txt"}
                                                          {:url "456/5.txt"}
                                                          {:url "789.txt"}])
-
-(facts "Normalize works")
