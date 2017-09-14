@@ -405,3 +405,17 @@
 
 (defmethod ext->is->is :default [_] nil)
 (defmethod ext->os->os :default [_] nil)
+
+; Example:
+; (ns myns
+;   (:require [uio.uio :as uio]      ; loads implementation
+;             [uio.impl :as impl]))
+;
+; (uio.impl/list-available-implementations)
+; => {:fs     [:file :hdfs :http :https :mem :res :s3 :sftp]
+;     :codecs [:bz2 :gz :xz]}
+;
+; TODO temporary, don't use
+(defn list-available-implementations []
+  {:fs     (-> (.getMethodTable from)        (dissoc :default) keys sort vec)
+   :codecs (-> (.getMethodTable ext->is->is) (dissoc :default) keys sort vec)})

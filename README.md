@@ -68,7 +68,7 @@ For Java examples, see [Example.java](test/uio/Example.java).
 ; => nil
 
 ; Reading and writing with extension codecs
-(slurp (from* "file:///path/to.gz")                         ; decompress with `gzip`
+(slurp (from* "file:///path/to.gz"))                        ; decompress with `gzip`
 (spit  (to*   "file:///path/to.bz2") "<content>")           ; compress with `bzip2`
 (spit  (to*   "file:///path/to.xz.bz2.gz") "<content>")     ; compress with `xz`, 'bzip2' and `gzip`
 
@@ -198,6 +198,10 @@ Your local file system, e.g. `file:///home/user`.
 
 ; NOTE: to use Kerberos (`kinit`) authentication, leave empty values in
 ;       :hdfs.keytab.principal (KEYTAB_PRINCIPAL) and :hdfs.keytab.path (KEYTAB_FILE).
+
+; NOTE: to disable implementation of HDFS and remove all depended JARs, add this exclusion to your `project.clj`:
+:dependencies [[uio/uio "1.1" :exclusions [org.apache.hadoop/hadoop-common
+                                           org.apache.hadoop/hadoop-hdfs]]]
 ```
 
 ### HTTP(S)
