@@ -251,23 +251,27 @@
     (baos->nil baos)
     (.toByteArray baos)))
 
-; manual encoding/decoding: streams
-(defn ^InputStream  ext-decode-is [^Keyword ext ^InputStream is]  ((ext->is->is ext) is))
-(defn ^OutputStream ext-encode-os [^Keyword ext ^OutputStream os] ((ext->os->os ext) os))
-
-; manual encoding/decoding: bytes
-(defn ^bytes ext-decode-bytes [^Keyword ext ^bytes source]
-  (with-baos->bytes
-    #(with-open [is ((ext->os->os ext) (bytes->is source))
-                 os %]
-       (jio/copy is os))))
-
-(defn ^bytes ext-encode-bytes [^Keyword ext ^bytes source]
-  (with-baos->bytes
-    #(with-open [is (bytes->is source)
-                 os ((ext->os->os ext) %)]
-       (jio/copy is os))))
-
+; encoding/decoding: streams + bytes
+(defn decode [^Keyword ext is-or-bytes] ;
+  (cond (instance? InputStream          is-or-bytes) ((ext->is->is ext) is-or-bytes)
+        (instance? (Class/forName "[B") is-or-bytes) (with-baos->bytes
+                                                       #(with-open [is (decode ext (bytes->is is-or-bytes))
+                                                                    os %]
+                                                          (jio/copy is os)))
+        :else                                        (die (str "Expected InputStream or OutputStream, but got "
+                                                               (if (nil? is-or-bytes)
+                                                                 "nil"
+                                                                 (.getName (type is-or-bytes)))))))
+(defn encode [^Keyword ext os-or-bytes]
+  (cond (instance? OutputStream         os-or-bytes) ((ext->os->os ext) os-or-bytes)
+        (instance? (Class/forName "[B") os-or-bytes) (with-baos->bytes
+                                                       #(with-open [is (bytes->is os-or-bytes)
+                                                                    os (encode ext %)]
+                                                          (jio/copy is os)))
+        :else                                        (die (str "Expected InputStream or OutputStream, but got "
+                                                               (if (nil? os-or-bytes)
+                                                                 "nil"
+                                                                 (.getName (type os-or-bytes)))))))
 ; other streams functions
 (defn ^OutputStream ->nil-os []
   (Streams$NullOutputStream.))

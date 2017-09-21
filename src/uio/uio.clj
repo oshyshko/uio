@@ -45,6 +45,10 @@
 (def bytes->is            i/bytes->is)
 (def with-baos->bytes     i/with-baos->bytes)
 
+; codec helper fns
+(def decode               i/decode)
+(def encode               i/encode)
+
 (def ->nil-os             i/->nil-os)
 (def ->countable          i/->countable)                    ; use with (count ...)
 (def ->digestible         i/->digestible)                   ; use with (close-and-digest ...)

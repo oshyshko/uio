@@ -114,3 +114,13 @@
                                                          {:url "456/456/3.txt"}
                                                          {:url "456/5.txt"}
                                                          {:url "789.txt"}])
+
+(facts "encode + decode works"
+  (let [s "hello world"]
+    (->> s (.getBytes) (encode :gz)  (decode :gz)  (String.) ) => s
+    (->> s (.getBytes) (encode :bz2) (decode :bz2) (String.) ) => s
+    (->> s (.getBytes) (encode :xz)  (decode :xz)  (String.) ) => s
+
+    ; check built-in filters
+    (map #(count (encode % (.getBytes s)))
+         [:gz :bz2 :xz]) => [31 48 68]))
