@@ -9,7 +9,7 @@
            [com.amazonaws.services.s3 AmazonS3Client]
            [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing ObjectMetadata S3ObjectSummary]
            [com.amazonaws.services.s3.transfer TransferManager]
-           [uio.fs Streams$S3OutputStream]))
+           [uio.fs S3$S3OutputStream]))
 
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter k))
@@ -35,7 +35,7 @@
                                              #(.shutdown %)))
 
 (defmethod to      :s3 [url]        (wrap-os #(AmazonS3Client. (->creds))
-                                             #(Streams$S3OutputStream. % (host url) (path-no-slash url))
+                                             #(S3$S3OutputStream. % (host url) (path-no-slash url))
                                              #(.shutdown %)))
 
 (defmethod exists? :s3 [url]        (with-s3 url (fn [c b k] (.doesObjectExist c b k))))
