@@ -125,7 +125,7 @@ public class Streams {
         public int read(byte[] b, int off, int len) throws IOException {
             int n = is.read(b, off, len);
             if (n != -1)
-                md.update(b, off, len);
+                md.update(b, off, n);
             return n;
         }
 
