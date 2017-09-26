@@ -62,7 +62,7 @@
         (errln "Version:" (str "["
                                (try (->> (uio/from "res:///META-INF/leiningen/uio/uio/project.clj")
                                          slurp
-                                         (re-find #"^\(defproject (.+)\"")
+                                         (re-find #"^\(defproject (.+\")")
                                          second)
                                     (catch Throwable _ "unknown"))
                                "]"))
