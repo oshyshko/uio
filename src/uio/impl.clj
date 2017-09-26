@@ -5,7 +5,7 @@
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream]
            [java.net URI URLEncoder]
            [java.security Security]
-           [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream]))
+           [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer]))
 
 (def default-delimiter "/")
 (def default-opts-ls   {:recurse false})
@@ -153,7 +153,6 @@
     url))
 
 ; See "test_uio.clj", (facts "intercalate-with-dirs works" ...)
-; TODO consider adding few examples here
 (defn intercalate-with-dirs
   ([kvs]           (intercalate-with-dirs default-delimiter kvs))
   ([delimiter kvs] (intercalate-with-dirs nil delimiter kvs))
@@ -419,7 +418,10 @@
 ; => {:fs     [:file :hdfs :http :https :mem :res :s3 :sftp]
 ;     :codecs [:bz2 :gz :xz]}
 ;
-; TODO temporary, don't use
 (defn list-available-implementations []
   {:fs     (-> (.getMethodTable from)        (dissoc :default) keys sort vec)
    :codecs (-> (.getMethodTable ext->is->is) (dissoc :default) keys sort vec)})
+
+(defn close-when-realized-or-finalized [->close xs]
+  (let [f (Streams$Finalizer. ->close)]
+    (concat xs (lazy-seq (.close f)))))

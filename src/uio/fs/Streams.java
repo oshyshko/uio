@@ -1,6 +1,7 @@
 package uio.fs;
 
 import clojure.lang.Counted;
+import clojure.lang.IFn;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.IOException;
@@ -187,4 +188,29 @@ public class Streams {
         }
     }
 
+    public static class Finalizer implements AutoCloseable {
+        private IFn f;
+
+        public Finalizer(IFn f) {
+            if (f == null)
+                throw new NullPointerException("Argument `f` can't be null");
+
+            this.f = f;
+        }
+
+        public synchronized void close() throws Exception {
+            if (f == null)
+                return;
+            f.invoke();
+            f = null;
+        }
+
+        protected synchronized void finalize() throws Throwable {
+            close();
+        }
+
+        public String toString() {
+            return "Finalizer{f=" + f + '}';
+        }
+    }
 }

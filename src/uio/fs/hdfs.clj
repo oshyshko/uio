@@ -18,8 +18,7 @@
 
 (deftype HdfsIterator [^FileSystem fs ^RemoteIterator ri] Iterator
   (hasNext  [_] (.hasNext ri))
-  (next     [_] (.next ri))
-  (finalize [_] (.close fs)))
+  (next     [_] (.next ri)))
 
 (defn ->config []
   (let [c            (Configuration.)
@@ -66,14 +65,6 @@
   (with-open [fs (FileSystem/newInstance (->config))]
     (fs->x fs)))
 
-(defn remote-iterator->seq [^FileSystem fs ^RemoteIterator ri] ; FileSystem -> RemoteIterator<LocatedFileStatus> -> [LocatedFileStatus]
-  ; TODO find a proper way to close `fs`. Remove when session reuse implemented
-  (let [i (HdfsIterator. fs ri)]
-    ((fn tail [] (if (.hasNext i)
-                   (cons (.next i)
-                         (lazy-seq (tail)))
-                   (.close fs))))))                         ; close if fully consumed
-
 (defn file-status->kv [^FileStatus f]
   (cond (.isFile f)      {:url (-> f .getPath .toUri str) :size (.getLen f)}
         (.isDirectory f) {:url (-> f .getPath .toUri str) :dir true}
@@ -114,14 +105,16 @@
                                              nil)))
 
 (defmethod ls      :hdfs [url & opts] (let [opts (get-opts default-opts-ls url opts)]
-                                        (let [fs    (FileSystem/newInstance (->config))
-                                              files (->> (if (:recurse opts)        ; RemoteIterator<LocatedFileStatus>
-                                                           (.listFiles fs (Path. (->url url)) true)
-                                                           (.listStatusIterator fs (Path. (->url url))))
-                                                         (remote-iterator->seq fs)  ; [FileStatus]
-                                                         (map file-status->kv))]    ; [{kv}]
-                                          (cond->> files
-                                                   (:recurse opts) (intercalate-with-dirs)))))
+                                        (let [fs (FileSystem/newInstance (->config))]
+                                          (cond->>
+                                            (->> (if (:recurse opts) ; RemoteIterator<LocatedFileStatus>
+                                                   (.listFiles fs (Path. (->url url)) true)
+                                                   (.listStatusIterator fs (Path. (->url url))))
+                                                 (HdfsIterator. fs) ; Iterator<LocatedFileStatus>
+                                                 (iterator-seq) ; [FileStatus]
+                                                 (map file-status->kv) ; [{kv}]
+                                                 (close-when-realized-or-finalized #(.close fs)))
+                                            (:recurse opts) (intercalate-with-dirs)))))
 
 (defmethod mkdir   :hdfs [url & opts] (with-hdfs #(do (or (try (.mkdirs % (Path. (->url url)))
                                                                (catch FileAlreadyExistsException _
