@@ -8,7 +8,8 @@
            [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer]))
 
 (def default-delimiter "/")
-(def default-opts-ls   {:recurse false})
+(def default-opts-ls   {:recurse false
+                        :long    false})
 
 ; URL manipulation (not really a part of public API)
 ;
@@ -132,6 +133,11 @@
     url
     (str url default-delimiter)))
 
+(defn ensure-not-ends-with-delimiter [^String url]
+  (if (str/ends-with? url default-delimiter)
+    (recur (.substring url 0 (- (count url) 1)))
+    url))
+
 ; Example:
 ; (get-parent-dir "/" "1/2/3.txt")
 ; => "1/2"
@@ -144,13 +150,17 @@
 
 (defn with-parent [^String parent-url ^String file]
   (if (str/includes? file default-delimiter)
-    (die (str "Argument \"file\" expected to have no directory delimiters, but it had: " (pr-str file))))
+    (die (str "Expected argument \"file\" to have no directory delimiters, but it had: " (pr-str file))))
   (str (ensure-ends-with-delimiter parent-url) file))
 
-(defn ensure-has-no-trailing-slash [^String url]
-  (if (str/ends-with? url default-delimiter)
-    (recur (.substring url 0 (- (count url) 1)))
-    url))
+(defn replace-path [^String url ^String absolute-path]
+  (if-not (str/starts-with? absolute-path default-delimiter)
+    (die (str "Expected argument \"absolute-path\" to start with a directory delimiter, but was: " (pr-str absolute-path))))
+  (str (subs url
+             0
+             (- (count url)
+                (count (path url))))
+       absolute-path))
 
 ; See "test_uio.clj", (facts "intercalate-with-dirs works" ...)
 (defn intercalate-with-dirs

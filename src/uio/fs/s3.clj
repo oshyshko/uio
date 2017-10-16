@@ -55,44 +55,40 @@
                                                   (.setContentLength (size from-url))))))
             #(.shutdownNow %)))
 
-(defn -ls [c b k url recurse delimiter marker]
-  ; create a recursive fn (that produces a lazy seq) and kick it
-  ((fn -ls-r []
-     (let [^ObjectListing l (.listObjects c (ListObjectsRequest. b k marker (if recurse nil delimiter) nil))]
-       (concat
-         ; this page
-         (sort-by :url                                      ; move dirs between files. S3 returns 1000 files per batch + dirs, so it's ok to sort in memory
-                  (concat
-                    ; files
-                    (for [^S3ObjectSummary s (.getObjectSummaries l)]
-                      {:url  (bucket-key->url (.getBucketName s) (.getKey s))
-                       :size (-> s .getSize)
-                       ;; S3-specific attributes -- TODO uncomment in future, when have better understanding of overlap with other FS
-                       ;:s3.modified      (-> s .getLastModified)
-                       ;:s3.etag          (-> s .getETag)
-                       ;:s3.owner         (-> s .getOwner .getDisplayName)
-                       ;:s3.owner-id      (-> s .getOwner .getId)
-                       ;:s3.storage-class (-> s .getStorageClass)
-                       })
-                    ; dirs
-                    (for [^String s (.getCommonPrefixes l)]
-                      {:url (bucket-key->url b (subs s 0 (dec (.length s))))
-                       :dir true})))
+(defn -ls [c b k url recurse? long? delimiter marker]
+  (let [^ObjectListing l (.listObjects c (ListObjectsRequest. b k marker (if recurse? nil delimiter) nil))]
+    (concat
+      ; this page
+      (sort-by :url                                      ; move dirs between files. S3 returns 1000 files per batch + dirs, so it's ok to sort in memory
+               (concat
+                 ; files
+                 (for [^S3ObjectSummary s (.getObjectSummaries l)]
+                   (cond->  {:url  (bucket-key->url (.getBucketName s) (.getKey s))
+                             :size (.getSize s)}
+                            long?
+                            (merge {:modified (.getLastModified s)})))
+                 ; dirs
+                 (for [^String s (.getCommonPrefixes l)]
+                   {:url (cond-> (bucket-key->url b s)
+                                 recurse?
+                                 (ensure-ends-with-delimiter))
+                    :dir true})))
 
-         ; next page
-         (if (.isTruncated l)
-           (lazy-seq (-ls c
-                          b
-                          k
-                          url
-                          recurse
-                          delimiter
-                          (.getNextMarker l)))))))))
+      ; next page
+      (if (.isTruncated l)
+        (lazy-seq (-ls c
+                       b
+                       k
+                       url
+                       recurse?
+                       long?
+                       delimiter
+                       (.getNextMarker l)))))))
 
 (defmethod ls      :s3 [url & args] (let [opts (get-opts default-opts-ls url args)
                                           c (AmazonS3Client. (->creds))
                                           b (host url)
-                                          k (path-no-slash url)]
+                                          k (path-no-slash (ensure-ends-with-delimiter url))]
                                       (cond->> (close-when-realized-or-finalized
                                                  #(.shutdown c)
                                                  (-ls c
@@ -100,6 +96,7 @@
                                                       k
                                                       (ensure-ends-with-delimiter url)
                                                       (:recurse opts)
+                                                      (:long opts)
                                                       default-delimiter
                                                       nil)) ; nil => list from beginning
 

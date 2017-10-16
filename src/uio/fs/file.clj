@@ -4,12 +4,9 @@
   "
   (:require [uio.impl :refer :all])
   (:import [java.io File]
-           [java.nio.file Files Paths OpenOption LinkOption AccessDeniedException NoSuchFileException]
-           [java.nio.file.attribute FileAttribute]
-           [java.util.stream Stream]))
-
-(deftype Finalizer [^Stream s] Object
-  (finalize [_] (.close s)))
+           [java.nio.file Files Paths OpenOption LinkOption Path]
+           [java.nio.file.attribute FileAttribute PosixFileAttributes PosixFilePermissions]
+           [java.util Date]))
 
 (defmethod from    :file [url] (-> url ->url Paths/get (Files/newInputStream    (into-array OpenOption []))))
 (defmethod to      :file [url] (-> url ->url Paths/get (Files/newOutputStream   (into-array OpenOption []))))
@@ -18,42 +15,50 @@
 (defmethod delete  :file [url] (-> url ->url Paths/get (Files/deleteIfExists)))
 (defmethod mkdir   :file [url] (-> url ->url Paths/get (Files/createDirectories (into-array FileAttribute []))))
 
-(defmethod ls      :file [url & [opts]]
-    (lazy-cat ; create a recursive fn and kick it
-              ((fn -ls [url]
-                 (try
-                   (let [stream (-> url ->url Paths/get Files/list)
-                         z      (->Finalizer stream)]
-                     (lazy-cat (mapcat #(let [is-symlink  (Files/isSymbolicLink %)
-                                              is-dir      (Files/isDirectory % (into-array LinkOption []))
-                                              file-url (str (.toUri %))]
-                                          (cons
-                                            ; next element
-                                            (merge {:url (ensure-has-no-trailing-slash file-url)}
+(defn f->kv [file-url long? is-dir is-symlink ^Path f]
+  (try
+    (merge {:url file-url}
 
-                                                   (if is-symlink
-                                                     {:symlink (ensure-has-no-trailing-slash (str (.toUri (Files/readSymbolicLink %))))})
+           (if is-dir
+             {:dir true}
+             {:size (Files/size f)})
 
-                                                   (if is-dir
-                                                     {:dir true}
-                                                     (try {:size (Files/size %)}
-                                                          (catch NoSuchFileException e {:size 0 :error (str e)})))) ; TODO improve error reporting?
-                                            ; recurse if asked
-                                            (if (and is-dir
-                                                     (:recurse opts)
-                                                     (and (not is-symlink)))
-                                              (lazy-seq (-ls file-url)))))
+           (if long?
+             (let [attrs (Files/readAttributes f PosixFileAttributes (into-array LinkOption []))]
+               (merge {:modified (Date. (.toMillis (.lastModifiedTime attrs)))
+                       :owner    (-> attrs .owner .getName)
+                       :group    (-> attrs .group .getName)
+                       :perms    (str (if is-dir "d" "-")
+                                      (PosixFilePermissions/toString (.permissions attrs)))}
+                      (if is-symlink
+                        {:symlink (str "file://" (->> (Files/readSymbolicLink f) ; resolve absolute + relative link
+                                                      (.resolve (.resolveSibling f "."))
+                                                      (.normalize)))})))))
 
-                                       (iterator-seq (.iterator stream)))
+    (catch Exception e {:url file-url :error (str e)})))
 
-                               ; called upon reaching end of the `concat`ed list
-                               (.finalize z)))
+(defn -ls [url recurse? long?]
+  (try
+    (let [s (-> url ->url Paths/get Files/list)]
+      (->> (iterator-seq (.iterator s))
+           (sort-by #(.getFileName %))
+           (mapcat #(let [is-symlink (Files/isSymbolicLink %)
+                          is-dir     (Files/isDirectory % (into-array LinkOption []))
+                          file-url   (ensure-not-ends-with-delimiter (str (.toUri %)))]
+                      (cons (f->kv file-url long? is-dir is-symlink %)
+                            (if (and is-dir
+                                     recurse?
+                                     (and (not is-symlink)))
+                              (lazy-seq (-ls file-url recurse? long?))))))
 
-                   (catch AccessDeniedException e [{:url url :error (str e)}]) ; TODO improve error reporting?
-                   (catch Exception e             (die "Couldn't list files for" {:url url} e))))
+           (close-when-realized-or-finalized #(.close s))))
 
-                 ; apply the fn with starting dir
-                (normalize url))))
+    (catch Exception e [{:url url :error (str e)}])))
+
+(defmethod ls      :file [url & args] (let [opts (get-opts default-opts-ls url args)]
+                                        (-ls (normalize url)
+                                               (:recurse opts)
+                                               (:long opts))))
 
 ; TODO consider removing or moving elsewhere
 (defn path->url   ^String [^String path]  (str (.toURI (File. path))))

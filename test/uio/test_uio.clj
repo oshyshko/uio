@@ -1,7 +1,8 @@
 (ns uio.test-uio
   (:require [uio.uio :refer :all]
-            [uio.impl :refer [ensure-has-no-trailing-slash
+            [uio.impl :refer [ensure-not-ends-with-delimiter
                               intercalate-with-dirs
+                              replace-path
                               url->ext+s->s]]
             [midje.sweet :refer :all])
   (:import (java.util.zip GZIPOutputStream)
@@ -14,6 +15,8 @@
   (path          "foo://user@host:8080/some-dir/file.txt?arg=value") => "/some-dir/file.txt"
   (path-no-slash "foo://user@host:8080/some-dir/file.txt?arg=value") => "some-dir/file.txt"
 
+  (parent-of "file:///path/to/file.txt")                             => "file:///path/to"
+
   (normalize     "file:///")                                         => "file:///"
   (normalize     "file:////")                                        => "file:///"
   (normalize     "file://///")                                       => "file:///"
@@ -21,9 +24,16 @@
   (normalize     "file://host/path/to/")                             => "file://host/path/to/"
   (normalize     "file://host/path/to//")                            => "file://host/path/to/"
 
-  (ensure-has-no-trailing-slash "test")                              => "test"
-  (ensure-has-no-trailing-slash "test/")                             => "test"
-  (ensure-has-no-trailing-slash "test///")                           => "test")
+  (replace-path  "sftp://host/path/to/file.txt" "file.txt")          => (throws #"Expected argument")
+  (replace-path  "sftp://host/path/to/file.txt" "/")                 => "sftp://host/"
+
+  (replace-path  "sftp://user@host:123/path/to/file.txt" "")        => (throws #"Expected argument")
+  (replace-path  "sftp://user@host:123/path/to/file.txt"
+                 "/another/path/to/file.txt")                        => "sftp://user@host:123/another/path/to/file.txt"
+
+  (ensure-not-ends-with-delimiter "test")                            => "test"
+  (ensure-not-ends-with-delimiter "test/")                           => "test"
+  (ensure-not-ends-with-delimiter "test///")                         => "test")
 
 (facts "In-memory implementation works"
   (spit  (to   "mem:///greeetings.txt") "hello") => nil
@@ -69,8 +79,8 @@
   ; base case + 2 + flush
   (intercalate-with-dirs [{:url "1.txt"}
                           {:url "123/2.txt"}])       => [{:url "1.txt"}
-                                                             {:url "123" :dir true}
-                                                             {:url "123/2.txt"}]
+                                                         {:url "123" :dir true}
+                                                         {:url "123/2.txt"}]
   ; simple case + continue + skip matching last flushed dir
   (intercalate-with-dirs "123" [{:url "1.txt"}
                                 {:url "123/2.txt"}]) => [{:url "1.txt"}

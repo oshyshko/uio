@@ -16,14 +16,10 @@
   (:require [clojure.string :as str]
             [uio.fs.file :as file]
             [uio.impl :refer :all])
-  (:import [com.jcraft.jsch JSch ChannelSftp SftpException Session Channel]
+  (:import [com.jcraft.jsch JSch Channel ChannelSftp ChannelSftp$LsEntry Session SftpException]
            [java.io ByteArrayInputStream]
-           [java.util.zip GZIPOutputStream GZIPInputStream]))
-
-; see `(defmethod ls :sftp ...)` for details
-(deftype Finalizer [^Session s ^Channel c] Object
-  (finalize [_] (.disconnect c)
-                (.disconnect s)))
+           [java.util.zip GZIPOutputStream GZIPInputStream]
+           [java.util Date]))
 
 (defn reformat-private-key-if-needed
   "JSch expects a private key with new-line characters as described in RFC-4716.
@@ -48,7 +44,7 @@
                         (env "SFTP_USER")
                         (env "SSH_USER")                    ; backward compatibility
                         (die "Either (uio/with {:sftp.user} ... ) or env SFTP_USER was expected to be set"))
-        
+
         known-hosts (or (config :sftp.known-hosts)
                         (env "SFTP_KNOWN_HOSTS")
                         (env "SSH_KNOWN_HOSTS")             ; backward compatibility
@@ -78,11 +74,11 @@
                                     nil
                                     (.getBytes (or id-pass ""))))
 
-        s           (.getSession j user (host url) (or (port url) 22))
-        _           (some->>  (.setPassword s pass))
+        ^Session s  (.getSession j user (host url) (or (port url) 22))
+        _           (some->> (.setPassword s pass))
         _           (.connect s)
 
-        c           (doto (.openChannel s "sftp")
+        ^Channel c  (doto (.openChannel s "sftp")
                           (.connect))]
     [s c]))
 
@@ -134,47 +130,45 @@
                                                      (fn [[s c]] (.disconnect c)
                                                                  (.disconnect s))))
 
-(defmethod ls      :sftp [url & [opts]]
-  ; TODO explicitly release resources after migrating to reusable/scoped sessions
-  (let [[s c] (->session+channel url)
-        z (->Finalizer s c)]                                ; a trick to release resources upon a) reaching end of the collection or b) being collected by GC
-    (lazy-cat
-      ; create a recursive fn and call it
-      ((fn -ls [url z]                                      ; prevent finalizer from being GCed while this fn is still referenced by someone
-         (->> (try (.ls c (path url))
-                   (catch Exception e (die "Couldn't list files for" {:url url} e)))
-              (sort-by #(.getFilename %))
+(defn f->kv [c file-url long? ^ChannelSftp$LsEntry f]
+  (let [a      (.getAttrs f)
+        is-dir (.isDir a)]
+    (merge {:url file-url}
+           (if is-dir
+             {:dir true}
+             {:size (.getSize (.getAttrs f))})
 
-              ; TODO implement symlink behavior
+           (if long?
+             (merge {:accessed (-> a .getATime (* 1000) Date.)
+                     :modified (-> a .getMTime (* 1000) Date.)
+                     :owner    (-> a .getUId)
+                     :group    (-> a .getGId)
+                     :perms    (-> a .getPermissionsString)}
 
-              (mapcat #(let [filename (.getFilename %)
-                             file-url (with-parent url (encode-url filename))]
-                         (cond ; skip "." and ".." dirs
-                             (and (.isDir (.getAttrs %))
-                                  (#{"." ".."} filename))
-                             nil
+                    (if (.isLink a)
+                      {:symlink (replace-path file-url (.readlink c (path file-url)))}))))))
 
-                             ; dir => enlist + recurse if asked
-                             (.isDir (.getAttrs %))
-                             (cons {:url file-url
-                                    :dir true}
-                                   (if (:recurse opts)
-                                     (lazy-seq (-ls file-url z))
-                                     nil))
+(defn -ls [c url recurse? long?]
+  (try (->> (concat (.ls c (str (path url) "/*"))
+                    (.ls c (str (path url) "/.*")))
+            (sort-by #(.getFilename %))
+            (mapcat #(let [f        (.getFilename %)
+                           file-url (with-parent url (encode-url f))]
+                       (if-not (#{"." ".."} f)              ; skip "." and ".." dirs
+                         (cons (f->kv c file-url long? %)
+                               (if (and recurse?
+                                        (.isDir (.getAttrs %))) ; if isDir=true then isLink=false
+                                 (lazy-seq (-ls c file-url recurse? long?))
+                                 nil))
+                         nil))))
+    (catch Exception e [{:url url :error (str e)}])))
 
-                             ; file => enlist
-                             :else
-                             [{:url  file-url
-                               :size (.getSize (.getAttrs %))}])))))
-
-        ; fn args -- starting dir
-        (let [normalized-url (normalize url)]
-          (if (str/ends-with? normalized-url default-delimiter)
-            normalized-url
-            (str default-delimiter)))
-        z)
-
-      ; close session/channel upon reaching the end of the sequence (without waiting for GC).
-      ; NOTE: (lazy-cat xs ys zs) === (concat (lazy-seq xs) (lazy-seq ys) (lazy-seq zs))
-      ;       meaning, that it's `(lazy-seq (.finalize z))` and it will be called only when the end is reached.
-      (.finalize z))))
+(defmethod ls :sftp [url & args] (let [opts (get-opts default-opts-ls url args)
+                                       [s c] (->session+channel url)]
+                                   (close-when-realized-or-finalized
+                                     #(do (.disconnect c)
+                                          (.disconnect s))
+                                     (-ls c
+                                          (ensure-not-ends-with-delimiter (normalize url))
+                                          (:recurse opts)
+                                          (:long opts)))))
