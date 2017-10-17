@@ -15,7 +15,9 @@
   (path          "foo://user@host:8080/some-dir/file.txt?arg=value") => "/some-dir/file.txt"
   (path-no-slash "foo://user@host:8080/some-dir/file.txt?arg=value") => "some-dir/file.txt"
 
-  (parent-of "file:///path/to/file.txt")                             => "file:///path/to"
+  (parent-of     "file:///path/to/file.txt")                         => "file:///path/to/"
+  (parent-of     "/path/to/file.txt")                                => "/path/to/"
+  (parent-of     "path/to/file.txt")                                 => "path/to/"
 
   (normalize     "file:///")                                         => "file:///"
   (normalize     "file:////")                                        => "file:///"
@@ -79,17 +81,17 @@
   ; base case + 2 + flush
   (intercalate-with-dirs [{:url "1.txt"}
                           {:url "123/2.txt"}])       => [{:url "1.txt"}
-                                                         {:url "123" :dir true}
+                                                         {:url "123/" :dir true}
                                                          {:url "123/2.txt"}]
   ; simple case + continue + skip matching last flushed dir
-  (intercalate-with-dirs "123" [{:url "1.txt"}
-                                {:url "123/2.txt"}]) => [{:url "1.txt"}
-                                                         {:url "123/2.txt"}]
+  (intercalate-with-dirs "123/" [{:url "1.txt"}
+                                 {:url "123/2.txt"}]) => [{:url "1.txt"}
+                                                          {:url "123/2.txt"}]
   ; simple case + continue
-  (intercalate-with-dirs "123" [{:url "456/1.txt"}
-                                {:url "456/2.txt"}]) => [{:url "456" :dir true}
-                                                         {:url "456/1.txt"}
-                                                         {:url "456/2.txt"}]
+  (intercalate-with-dirs "123/" [{:url "456/1.txt"}
+                                 {:url "456/2.txt"}]) => [{:url "456/" :dir true}
+                                                          {:url "456/1.txt"}
+                                                          {:url "456/2.txt"}]
   ; complex case
   (intercalate-with-dirs [{:url "1.txt"}
                           {:url "123.txt"}
@@ -109,18 +111,18 @@
                           {:url "456/5.txt"}
                           {:url "789.txt"}])         => [{:url "1.txt"}
                                                          {:url "123.txt"}
-                                                         {:url "123" :dir true}
+                                                         {:url "123/"     :dir true}
                                                          {:url "123/1.txt"}
                                                          {:url "123/2.txt"}
                                                          {:url "123/3.txt"}
-                                                         {:url "123/123" :dir true}
+                                                         {:url "123/123/" :dir true}
                                                          {:url "123/123/1.txt"}
-                                                         {:url "456" :dir true}
+                                                         {:url "456/"     :dir true}
                                                          {:url "456/1.txt"}
-                                                         {:url "456/123" :dir true}
+                                                         {:url "456/123/" :dir true}
                                                          {:url "456/123/1.txt"}
                                                          {:url "456/123/2.txt"}
-                                                         {:url "456/456" :dir true}
+                                                         {:url "456/456/" :dir true}
                                                          {:url "456/456/3.txt"}
                                                          {:url "456/5.txt"}
                                                          {:url "789.txt"}])

@@ -140,13 +140,12 @@
 
 ; Example:
 ; (get-parent-dir "/" "1/2/3.txt")
-; => "1/2"
+; => "1/2/"
 (defn parent-of                                                ; -> [String] (does not end with a slash)
   ([^String url] (parent-of default-delimiter url))
   ([^String delimiter ^String url]
-   (if-let [i (str/last-index-of url delimiter)]
-     (subs url 0 i)
-     nil)))
+   (when-let [i (str/last-index-of url delimiter)]
+     (subs url 0 (inc i)))))
 
 (defn with-parent [^String parent-url ^String file]
   (if (str/includes? file default-delimiter)

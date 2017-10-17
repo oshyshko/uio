@@ -92,7 +92,9 @@
                                                       nil)))
 
 (defn f->kv [long? ^FileStatus f]
-  (merge {:url (-> f .getPath .toUri str)}
+  (merge {:url (str (.toUri (.getPath f))
+                    (if (.isDirectory f)
+                      default-delimiter))}
 
          (if (.isFile f)      {:size (.getLen f)})
          (if (.isDirectory f) {:dir  true})

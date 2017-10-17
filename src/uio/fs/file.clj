@@ -31,9 +31,10 @@
                        :perms    (str (if is-dir "d" "-")
                                       (PosixFilePermissions/toString (.permissions attrs)))}
                       (if is-symlink
-                        {:symlink (str "file://" (->> (Files/readSymbolicLink f) ; resolve absolute + relative link
-                                                      (.resolve (.resolveSibling f "."))
-                                                      (.normalize)))})))))
+                        {:symlink (->> (Files/readSymbolicLink f) ; resolve absolute + relative link
+                                       (.resolve (.resolveSibling f "."))
+                                       (.normalize)
+                                       (#(str "file://" % (if is-dir default-delimiter))))})))))
 
     (catch Exception e {:url file-url :error (str e)})))
 
@@ -44,7 +45,7 @@
            (sort-by #(.getFileName %))
            (mapcat #(let [is-symlink (Files/isSymbolicLink %)
                           is-dir     (Files/isDirectory % (into-array LinkOption []))
-                          file-url   (ensure-not-ends-with-delimiter (str (.toUri %)))]
+                          file-url   (str (.toUri %))]      ; already ends with /
                       (cons (f->kv file-url long? is-dir is-symlink %)
                             (if (and is-dir
                                      recurse?

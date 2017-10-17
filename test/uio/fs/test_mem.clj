@@ -11,23 +11,23 @@
   (spit (to "mem:///123/456/aa/bb.txt") "ccc")
   (spit (to "mem:///123/456/cc.txt")    "dddd")
 
-  (ls "mem:///")        => [{:url "mem:///123"               :dir  true}]
+  (ls "mem:///")        => [{:url "mem:///123/"              :dir  true}]
 
-  (ls "mem:///123/")    => (ls "mem:///123/")
+  (ls "mem:///123")     => (ls "mem:///123/")
   (ls "mem:///123")     => [{:url "mem:///123/456.txt"       :size 1}
-                            {:url "mem:///123/456"           :dir  true}]
+                            {:url "mem:///123/456/"          :dir  true}]
 
 
   (ls "mem:///123/456") => [{:url "mem:///123/456/aa.txt"    :size 2}
-                            {:url "mem:///123/456/aa"        :dir  true}
+                            {:url "mem:///123/456/aa/"       :dir  true}
                             {:url "mem:///123/456/cc.txt"    :size 4}]
 
   (ls "mem:///"
-      {:recurse true})  => [{:url "mem:///123"               :dir  true}
+      {:recurse true})  => [{:url "mem:///123/"              :dir  true}
                             {:url "mem:///123/456.txt"       :size 1}
-                            {:url "mem:///123/456"           :dir  true}
+                            {:url "mem:///123/456/"          :dir  true}
                             {:url "mem:///123/456/aa.txt"    :size 2}
-                            {:url "mem:///123/456/aa"        :dir  true}
+                            {:url "mem:///123/456/aa/"       :dir  true}
                             {:url "mem:///123/456/aa/bb.txt" :size 3}
                             {:url "mem:///123/456/cc.txt"    :size 4}]
 

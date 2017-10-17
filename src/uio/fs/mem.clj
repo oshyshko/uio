@@ -34,13 +34,11 @@
                                                    (let [next-delimiter-i (str/index-of k default-delimiter (count base-dir))]
                                                      (if (or recurse
                                                              (not next-delimiter-i))
-                                                       {:url k                           :size (count v)}
-                                                       {:url (subs k 0 next-delimiter-i) :dir  true}))))
+                                                       {:url k                                 :size (count v)}
+                                                       {:url (subs k 0 (inc next-delimiter-i)) :dir  true}))))
 
                                             (distinct)
 
-                                            (intercalate-with-dirs)
-
-                                            ((if recurse identity rest)))))
+                                            ((if recurse intercalate-with-dirs identity)))))
 
 (defmethod mkdir   :mem [url & args] (do :nothing nil))
