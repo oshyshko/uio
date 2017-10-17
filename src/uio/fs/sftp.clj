@@ -130,10 +130,10 @@
                                                      (fn [[s c]] (.disconnect c)
                                                                  (.disconnect s))))
 
-(defn f->kv [c file-url long? ^ChannelSftp$LsEntry f]
+(defn f->kv [c uid->name gid->name file-url long? ^ChannelSftp$LsEntry f]
   (let [a      (.getAttrs f)
         is-dir (.isDir a)]
-    (merge {:url file-url}
+    (merge {:url (str file-url (if is-dir default-delimiter))}
            (if is-dir
              {:dir true}
              {:size (.getSize (.getAttrs f))})
@@ -141,34 +141,66 @@
            (if long?
              (merge {:accessed (-> a .getATime (* 1000) Date.)
                      :modified (-> a .getMTime (* 1000) Date.)
-                     :owner    (-> a .getUId)
-                     :group    (-> a .getGId)
+                     :owner    (or (uid->name (.getUId a)) (.getUId a))
+                     :group    (or (gid->name (.getGId a)) (.getGId a))
                      :perms    (-> a .getPermissionsString)}
 
                     (if (.isLink a)
-                      {:symlink (replace-path file-url (.readlink c (path file-url)))}))))))
+                      {:symlink (->> (.readlink c (path file-url))
+                                     (str (parent-of file-url))
+                                     normalize)}))))))
 
-(defn -ls [c url recurse? long?]
+(defn -ls [c uid->name gid->name url recurse? long?]
   (try (->> (concat (.ls c (str (path url) "/*"))
                     (.ls c (str (path url) "/.*")))
             (sort-by #(.getFilename %))
             (mapcat #(let [f        (.getFilename %)
                            file-url (with-parent url (encode-url f))]
                        (if-not (#{"." ".."} f)              ; skip "." and ".." dirs
-                         (cons (f->kv c file-url long? %)
+                         (cons (f->kv c uid->name gid->name file-url long? %)
                                (if (and recurse?
                                         (.isDir (.getAttrs %))) ; if isDir=true then isLink=false
-                                 (lazy-seq (-ls c file-url recurse? long?))
+                                 (lazy-seq (-ls c uid->name gid->name file-url recurse? long?))
                                  nil))
                          nil))))
     (catch Exception e [{:url url :error (str e)}])))
 
-(defmethod ls :sftp [url & args] (let [opts (get-opts default-opts-ls url args)
-                                       [s c] (->session+channel url)]
-                                   (close-when-realized-or-finalized
-                                     #(do (.disconnect c)
-                                          (.disconnect s))
-                                     (-ls c
-                                          (ensure-not-ends-with-delimiter (normalize url))
-                                          (:recurse opts)
-                                          (:long opts)))))
+(defn passwd->id->name [s]
+  (->> (str/split-lines s)
+       (map #(str/split % #":"))
+       (reduce (fn [id->name [name _ id :as line]]
+                 (try
+                   (assoc id->name (Integer/parseInt id) name)
+                   (catch Exception _ id->name)))
+               {})))
+
+(defn exec->s [s line]
+  (let [c (doto (.openChannel s "exec")
+                (.setCommand line)
+                (.connect))]
+    (try
+      (slurp (.getInputStream c))
+      (finally (.disconnect c)))))
+
+(defmethod ls :sftp [url & args] (let [opts     (get-opts default-opts-ls url args)
+                                       [s c]    (->session+channel url)
+                                       close-cs #(do (.disconnect c)
+                                                     (.disconnect s))
+
+                                       [uid->name gid->name]
+                                       (map #(if (:long opts)
+                                               (try (passwd->id->name (exec->s s %))
+                                                    (catch Exception _ {}))
+                                               {})
+                                            ["getent passwd"
+                                             "getent group"])]
+                                   (try
+                                     (close-when-realized-or-finalized
+                                       close-cs
+                                       (-ls c
+                                            uid->name
+                                            gid->name
+                                            (ensure-not-ends-with-delimiter (normalize url))
+                                            (:recurse opts)
+                                            (:long opts)))
+                                     (catch Exception _ (close-cs)))))
