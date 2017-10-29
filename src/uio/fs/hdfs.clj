@@ -65,18 +65,18 @@
   (with-open [fs (FileSystem/newInstance (->config))]
     (fs->x fs)))
 
-(defmethod from    :hdfs [url]        (wrap-is #(FileSystem/newInstance (->config))
+(defmethod from    :hdfs [url & args] (wrap-is #(FileSystem/newInstance (->config))
                                                #(.open % (Path. (->url url)))
                                                #(.close %)))
 
-(defmethod to      :hdfs [url]        (wrap-os #(FileSystem/newInstance (->config))
+(defmethod to      :hdfs [url & args] (wrap-os #(FileSystem/newInstance (->config))
                                                #(.create % (Path. (->url url)))
                                                #(.close %)))
 
-(defmethod exists? :hdfs [url]        (with-hdfs #(.exists % (Path. (->url url)))))
-(defmethod size    :hdfs [url]        (with-hdfs #(.getLen (.getFileStatus % (Path. (->url url))))))
+(defmethod exists? :hdfs [url & args] (with-hdfs #(.exists % (Path. (->url url)))))
+(defmethod size    :hdfs [url & args] (with-hdfs #(.getLen (.getFileStatus % (Path. (->url url))))))
 
-(defmethod delete  :hdfs [url]        (with-hdfs
+(defmethod delete  :hdfs [url & args] (with-hdfs
                                         #(do (and (not (.delete % (Path. (->url url)) false))
                                                   (.exists % (Path. (->url url)))
                                                   (die "Could not delete: got `false` and the file still exists" {:url url}))

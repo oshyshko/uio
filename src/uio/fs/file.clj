@@ -8,12 +8,17 @@
            [java.nio.file.attribute FileAttribute PosixFileAttributes PosixFilePermissions]
            [java.util Date]))
 
-(defmethod from    :file [url] (-> url ->url Paths/get (Files/newInputStream    (into-array OpenOption []))))
-(defmethod to      :file [url] (-> url ->url Paths/get (Files/newOutputStream   (into-array OpenOption []))))
-(defmethod size    :file [url] (-> url ->url Paths/get (Files/size)))
-(defmethod exists? :file [url] (-> url ->url Paths/get (Files/exists            (into-array LinkOption []))))
-(defmethod delete  :file [url] (-> url ->url Paths/get (Files/deleteIfExists)))
-(defmethod mkdir   :file [url] (-> url ->url Paths/get (Files/createDirectories (into-array FileAttribute []))))
+; TODO implement :offset + :length + assert all args are known
+(defmethod from    :file [url & args]   (-> url ->url Paths/get (Files/newInputStream    (into-array OpenOption []))))
+(defmethod to      :file [url & args]   (-> url ->url Paths/get (Files/newOutputStream   (into-array OpenOption []))))
+(defmethod size    :file [url & args]   (-> url ->url Paths/get (Files/size)))
+(defmethod exists? :file [url & args]   (-> url ->url Paths/get (Files/exists            (into-array LinkOption []))))
+(defmethod delete  :file [url & args]   (-> url ->url Paths/get (Files/deleteIfExists)))
+(defmethod mkdir   :file [url & args]   (-> url ->url Paths/get (Files/createDirectories (into-array FileAttribute []))))
+
+; TODO assert all args are known
+(defmethod attrs   :file [url & [opts]] (Files/setPosixFilePermissions (Paths/get (->url url))
+                                                                                  (PosixFilePermissions/fromString (:perms opts))))
 
 (defn f->kv [file-url long? is-dir is-symlink ^Path f]
   (try

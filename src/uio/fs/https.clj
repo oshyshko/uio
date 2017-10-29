@@ -29,12 +29,12 @@
 
          (finally (.disconnect c)))))
 
-(defmethod from    :http  [url] (.openStream (URL. url)))
-(defmethod size    :http  [url] (http-https-size url))
-(defmethod exists? :http  [url] (http-https-exists? url))
+(defmethod from    :http  [url & args] (.openStream (URL. url)))
+(defmethod size    :http  [url & args] (http-https-size url))
+(defmethod exists? :http  [url & args] (http-https-exists? url))
 ; `to` and `delete` are not implemented for HTTP
 
-(defmethod from    :https [url] (.openStream (URL. url)))
-(defmethod size    :https [url] (http-https-size url))
-(defmethod exists? :https [url] (http-https-exists? url))
+(defmethod from    :https [url & args] (.openStream (URL. url)))
+(defmethod size    :https [url & args] (http-https-size url))
+(defmethod exists? :https [url & args] (http-https-exists? url))
 ; `to` and `delete` are not implemented for HTTPS

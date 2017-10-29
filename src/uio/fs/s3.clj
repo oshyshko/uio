@@ -7,7 +7,7 @@
   (:require [uio.impl :refer :all])
   (:import [com.amazonaws.auth BasicAWSCredentials]
            [com.amazonaws.services.s3 AmazonS3Client]
-           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing ObjectMetadata S3ObjectSummary]
+           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing ObjectMetadata S3ObjectSummary GetObjectRequest]
            [com.amazonaws.services.s3.transfer TransferManager]
            [uio.fs S3$S3OutputStream]))
 
@@ -30,21 +30,21 @@
             #(client-bucket-key->x % (host url) (path-no-slash url))
             #(.shutdown %)))
 
-(defmethod from    :s3 [url]        (wrap-is #(AmazonS3Client. (->creds))
+(defmethod from    :s3 [url & args] (wrap-is #(AmazonS3Client. (->creds))
                                              #(.getObjectContent (.getObject % (host url) (path-no-slash url)))
                                              #(.shutdown %)))
 
-(defmethod to      :s3 [url]        (wrap-os #(AmazonS3Client. (->creds))
+(defmethod to      :s3 [url & args] (wrap-os #(AmazonS3Client. (->creds))
                                              #(S3$S3OutputStream. % (host url) (path-no-slash url))
                                              #(.shutdown %)))
 
-(defmethod exists? :s3 [url]        (with-s3 url (fn [c b k] (.doesObjectExist c b k))))
-(defmethod size    :s3 [url]        (with-s3 url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
-(defmethod delete  :s3 [url]        (with-s3 url (fn [c b k] (.deleteObject c b k))))
+(defmethod exists? :s3 [url & args] (with-s3 url (fn [c b k] (.doesObjectExist c b k))))
+(defmethod size    :s3 [url & args] (with-s3 url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
+(defmethod delete  :s3 [url & args] (with-s3 url (fn [c b k] (.deleteObject c b k))))
 
 (defmethod mkdir   :s3 [url & args] (do :nothing nil))      ; S3 doesn't support directories
 
-(defmethod copy    :s3 [from-url to-url]
+(defmethod copy    :s3 [from-url to-url & args]
   (try-with #(TransferManager. (->creds))
             #(with-open [is (from from-url)]
                (.waitForCompletion (.upload %
@@ -86,9 +86,9 @@
                        (.getNextMarker l)))))))
 
 (defmethod ls      :s3 [url & args] (let [opts (get-opts default-opts-ls url args)
-                                          c (AmazonS3Client. (->creds))
-                                          b (host url)
-                                          k (path-no-slash (ensure-ends-with-delimiter url))]
+                                          c    (AmazonS3Client. (->creds))
+                                          b    (host url)
+                                          k    (path-no-slash (ensure-ends-with-delimiter url))]
                                       (cond->> (close-when-realized-or-finalized
                                                  #(.shutdown c)
                                                  (-ls c

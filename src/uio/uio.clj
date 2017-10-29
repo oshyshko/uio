@@ -11,6 +11,7 @@
 (def delete               i/delete)
 (def ls                   i/ls)
 (def mkdir                i/mkdir)
+(def attrs                i/attrs)
 (def copy                 i/copy)
 (def from*                i/from*)
 (def to*                  i/to*)

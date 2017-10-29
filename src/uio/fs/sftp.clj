@@ -88,47 +88,48 @@
             (fn [[s c]] (.disconnect c)
                         (.disconnect s))))
 
-(defmethod from    :sftp [url]             (wrap-is #(->session+channel url)
-                                                    (fn [[s c]] (.get c (path url)))
-                                                    (fn [[s c]] (.disconnect c)
-                                                                (.disconnect s))))
-
+; TODO implement offset + length
+(defmethod from    :sftp [url & args] (wrap-is #(->session+channel url)
+                                               (fn [[s c]] (.get c (path url)))
+                                               (fn [[s c]] (.disconnect c)
+                                                           (.disconnect s))))
 ; TODO create all parent dirs?
-(defmethod to      :sftp [url]             (wrap-os #(file/->temp-file "uio-sftp-" "-temp.gz")
-                                                    #(GZIPOutputStream. (to %))
-                                                    #(try
-                                                       ; workaround to Jsch concurrency bug
-                                                       ; store in a local gzipped file before sending over SFTP
-                                                       (with-channel url (fn [c]
-                                                                           (.put c
-                                                                                 (GZIPInputStream. (from %))
-                                                                                 (path url))))
-                                                       (finally (delete %)))))
+; TODO include url in exception (all methods)
+(defmethod to      :sftp [url & args] (wrap-os #(file/->temp-file "uio-sftp-" "-temp.gz")
+                                               #(GZIPOutputStream. (to %))
+                                               #(try
+                                                  ; workaround to Jsch concurrency bug
+                                                  ; store in a local gzipped file before sending over SFTP
+                                                  (with-channel url (fn [c]
+                                                                      (.put c
+                                                                            (GZIPInputStream. (from %))
+                                                                            (path url))))
+                                                  (finally (delete %)))))
 
-(defmethod size    :sftp [url]             (with-channel url #(.getSize (.stat % (path url)))))
+(defmethod size    :sftp [url & args] (with-channel url #(.getSize (.stat % (path url)))))
 
-(defmethod exists? :sftp [url]             (try (size url)
-                                                true
-                                                (catch SftpException e
-                                                  (if (= ChannelSftp/SSH_FX_NO_SUCH_FILE (.id e))
-                                                    false
-                                                    (die "Couldn't determine file existence" {:url url} e)))))
+(defmethod exists? :sftp [url & args] (try (size url)
+                                           true
+                                           (catch SftpException e
+                                             (if (= ChannelSftp/SSH_FX_NO_SUCH_FILE (.id e))
+                                               false
+                                               (die "Couldn't determine file existence" {:url url} e)))))
 
-(defmethod delete  :sftp [url]             (with-channel url #(try (if (.isDir (.stat % (path url)))
-                                                                     (.rmdir % (path url))
-                                                                     (.rm % (path url)))
-                                                                   (catch Exception e
-                                                                     (die (str "Could not delete " (pr-str url) " -- " (.getMessage e)) {} e)))))
+(defmethod delete  :sftp [url & args] (with-channel url #(try (if (.isDir (.stat % (path url)))
+                                                                (.rmdir % (path url))
+                                                                (.rm % (path url)))
+                                                              (catch Exception e
+                                                                (die (str "Could not delete " (pr-str url) " -- " (.getMessage e)) {} e)))))
 
-(defmethod mkdir   :sftp [url]             (with-channel url #(try (.mkdir % (path url))
+(defmethod mkdir   :sftp [url & args]      (with-channel url #(try (.mkdir % (path url))
                                                                    (catch Exception e
                                                                      (die (str "Could not create directory at " (pr-str url)  " -- " (.getMessage e)) {} e)))))
 
-(defmethod copy    :sftp [from-url to-url] (try-with #(->session+channel to-url)
-                                                     (fn [[_ c]] (with-open [is (from from-url)]
-                                                                   (.put c is (path to-url))))
-                                                     (fn [[s c]] (.disconnect c)
-                                                                 (.disconnect s))))
+(defmethod copy    :sftp [from-url to-url & args] (try-with #(->session+channel to-url)
+                                                            (fn [[_ c]] (with-open [is (from from-url)]
+                                                                          (.put c is (path to-url))))
+                                                            (fn [[s c]] (.disconnect c)
+                                                              (.disconnect s))))
 
 (defn f->kv [c uid->name gid->name file-url long? ^ChannelSftp$LsEntry f]
   (let [a      (.getAttrs f)

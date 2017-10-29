@@ -38,16 +38,17 @@
 (defn encode-url    ^String  [^String url] (.replace (URLEncoder/encode url "UTF-8") "+" "%20"))
 
 ; Public API
-(defmulti from    (fn [^String url]        (scheme url)))   ; url         -> InputStream  -- must be closed by user, use (with-open [...])
-(defmulti to      (fn [^String url]        (scheme url)))   ; url         -> OutputStream -- must be closed by user, use (with-open [...])
-(defmulti size    (fn [^String url]        (scheme url)))   ; url         -> Number
-(defmulti exists? (fn [^String url]        (scheme url)))   ; url         -> boolean
-(defmulti delete  (fn [^String url]        (scheme url)))   ; url -> args -> nil
-(defmulti ls      (fn [^String url & opts] (scheme url)))   ; url -> args -> []
-(defmulti mkdir   (fn [^String url & opts] (scheme url)))   ; url -> args -> nil
-(defmulti copy    (fn [^String from-url ^String to-url]     ; url url -> nil
-                    (->url from-url)                        ; ensure `from-url` is also parsable
-                    (scheme to-url)))                       ; dispatch on `scheme` (and ensure it's also parsable)
+(defmulti from    (fn [^String url & args] (scheme url)))      ; url         -> InputStream  -- must be closed by user, use (with-open [...])
+(defmulti to      (fn [^String url & args] (scheme url)))      ; url         -> OutputStream -- must be closed by user, use (with-open [...])
+(defmulti size    (fn [^String url & args] (scheme url)))      ; url         -> Number
+(defmulti exists? (fn [^String url & args] (scheme url)))      ; url         -> boolean
+(defmulti delete  (fn [^String url & args] (scheme url)))      ; url -> args -> nil
+(defmulti ls      (fn [^String url & args] (scheme url)))      ; url -> args -> []
+(defmulti mkdir   (fn [^String url & args] (scheme url)))      ; url -> args -> nil
+(defmulti attrs   (fn [^String url & args] (scheme url)))      ; url -> args -> nil
+(defmulti copy    (fn [^String from-url ^String to-url & args] ; url url -> nil
+                    (->url from-url)                           ; ensure `from-url` is also parsable
+                    (scheme to-url)))                          ; dispatch on `scheme` (and ensure it's also parsable)
 
 ; Codecs
 (defmulti ext->is->is (fn [^String ext] ext)) ; ext -> (fn [^InputStream  is] ...wrap into another InputStream)
@@ -84,23 +85,29 @@
 (defn env    [^Keyword k] (System/getenv k))
 
 (defn wrap-is [->resource resource->is close-resource]
-  (let [r (->resource)]
+  (let [r       (->resource)
+        *closed (atom false)]
     (proxy [FilterInputStream] [(resource->is r)]
-      (close [] (try (proxy-super close)
-                     (finally (close-resource r)))))))
+      (close [] (when-not @*closed                          ; TODO remove a chance for race condition
+                  (try (proxy-super close)
+                       (finally (close-resource r)))
+                  (reset! *closed true))))))                ; TODO remove a chance for race condition
 
 (defn wrap-os [->resource resource->os close-resource]
-  (let [r (->resource)
-        os (resource->os r)]
+  (let [r       (->resource)
+        os      (resource->os r)
+        *closed (atom false)]
     (proxy [FilterOutputStream] [os]
       ; delegate batch methods as is -- don't peel into individual (.write ... ^int) calls
       ; NOTE: this lowers chances of SFTP implementation to hang (concurrency bug in JSch)
       ;       and improves performance
       (write ([^bytes bs]               (.write os bs))
-        ([^bytes bs offset length] (.write os bs offset length)))
+             ([^bytes bs offset length] (.write os bs offset length)))
 
-      (close [] (try (proxy-super close)
-                     (finally (close-resource r)))))))
+      (close [] (when-not @*closed                          ; TODO remove a chance for race condition
+                  (try (proxy-super close)
+                       (finally (close-resource r)))
+                  (reset! *closed true))))))                ; TODO remove a chance for race condition
 
 ; Example:
 ; (try-with #(FileInputStream. "file://1.txt")
@@ -113,14 +120,18 @@
     (try (resouce->value r)
          (finally (close-resource r)))))
 
-(defn get-opts [default-opts url args]                      ; {opts} -> url -> [{opts}] -> {opts}
+(defn get-opts [default-opts url args]                      ; {opts} -> [opt-keys] -> url -> [{opts}] -> {opts}
   (if (< 1 (count args))
     (die (str "Expected 0 or 1 arguments for `opts`, but got " (count args))
          {:url url :args args}))
 
-  ; TODO assert (first args) is a map or nil
+  (let [opts            (first args)                        ; TODO assert opts is a map or nil + there's no second arg
+        unexpected-args (reduce dissoc opts (keys default-opts))]
+    (when-not (empty? unexpected-args)
+      (die (str "Got unsupported options: " (pr-str unexpected-args)
+                ". Supported options are: " (pr-str (keys default-opts)))))
 
-  (merge default-opts (first args)))
+    (merge default-opts opts)))
 
 ; helper fns to support directories and recursive operations
 
@@ -403,18 +414,18 @@
                    sort
                    (str/join ", "))))))
 
-(defmethod from    :default [url]        (default-impl url "from"    nil))
-(defmethod to      :default [url]        (default-impl url "to"      nil))
-(defmethod size    :default [url]        (default-impl url "size"    nil))
-(defmethod exists? :default [url]        (default-impl url "exists?" nil))
-(defmethod delete  :default [url]        (default-impl url "delete"  nil))
+(defmethod from    :default [url & args] (default-impl url "from"    args))
+(defmethod to      :default [url & args] (default-impl url "to"      args))
+(defmethod size    :default [url & args] (default-impl url "size"    args))
+(defmethod exists? :default [url & args] (default-impl url "exists?" args))
+(defmethod delete  :default [url & args] (default-impl url "delete"  args))
 (defmethod ls      :default [url & args] (default-impl url "ls"      args))
 (defmethod mkdir   :default [url & args] (default-impl url "mkdir"   args))
+(defmethod attrs   :default [url & args] (default-impl url "attrs"   args))
 
-(defmethod copy    :default [from-url to-url] (with-open [is (from from-url)
-                                                          os (to to-url)]
-                                                (jio/copy is os :buffer-size 8192)))
-
+(defmethod copy    :default [from-url to-url & args] (with-open [is (from from-url)
+                                                                 os (to to-url)]
+                                                       (jio/copy is os :buffer-size 8192)))
 (defmethod ext->is->is :default [_] nil)
 (defmethod ext->os->os :default [_] nil)
 
