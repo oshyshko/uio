@@ -20,7 +20,7 @@
 (defmethod attrs   :file [url & [opts]] (Files/setPosixFilePermissions (Paths/get (->url url))
                                                                                   (PosixFilePermissions/fromString (:perms opts))))
 
-(defn f->kv [file-url long? is-dir is-symlink ^Path f]
+(defn f->kv [file-url attrs? is-dir is-symlink ^Path f]
   (try
     (merge {:url file-url}
 
@@ -28,7 +28,7 @@
              {:dir true}
              {:size (Files/size f)})
 
-           (if long?
+           (if attrs?
              (let [attrs (Files/readAttributes f PosixFileAttributes (into-array LinkOption []))]
                (merge {:modified (Date. (.toMillis (.lastModifiedTime attrs)))
                        :owner    (-> attrs .owner .getName)
@@ -43,7 +43,7 @@
 
     (catch Exception e {:url file-url :error (str e)})))
 
-(defn -ls [url recurse? long?]
+(defn -ls [url recurse? attrs?]
   (try
     (let [s (-> url ->url Paths/get Files/list)]
       (->> (iterator-seq (.iterator s))
@@ -51,11 +51,11 @@
            (mapcat #(let [is-symlink (Files/isSymbolicLink %)
                           is-dir     (Files/isDirectory % (into-array LinkOption []))
                           file-url   (str (.toUri %))]      ; already ends with /
-                      (cons (f->kv file-url long? is-dir is-symlink %)
+                      (cons (f->kv file-url attrs? is-dir is-symlink %)
                             (if (and is-dir
                                      recurse?
                                      (and (not is-symlink)))
-                              (lazy-seq (-ls file-url recurse? long?))))))
+                              (lazy-seq (-ls file-url recurse? attrs?))))))
 
            (close-when-realized-or-finalized #(.close s))))
 
@@ -64,7 +64,7 @@
 (defmethod ls      :file [url & args] (let [opts (get-opts default-opts-ls url args)]
                                         (-ls (normalize url)
                                                (:recurse opts)
-                                               (:long opts))))
+                                               (:attrs opts))))
 
 ; TODO consider removing or moving elsewhere
 (defn path->url   ^String [^String path]  (str (.toURI (File. path))))

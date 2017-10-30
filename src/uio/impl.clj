@@ -9,7 +9,7 @@
 
 (def default-delimiter "/")
 (def default-opts-ls   {:recurse false
-                        :long    false})
+                        :attrs   false})
 
 ; URL manipulation (not really a part of public API)
 ;

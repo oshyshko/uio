@@ -131,7 +131,7 @@
                                                             (fn [[s c]] (.disconnect c)
                                                               (.disconnect s))))
 
-(defn f->kv [c uid->name gid->name file-url long? ^ChannelSftp$LsEntry f]
+(defn f->kv [c uid->name gid->name file-url attrs? ^ChannelSftp$LsEntry f]
   (let [a      (.getAttrs f)
         is-dir (.isDir a)]
     (merge {:url (str file-url (if is-dir default-delimiter))}
@@ -139,7 +139,7 @@
              {:dir true}
              {:size (.getSize (.getAttrs f))})
 
-           (if long?
+           (if attrs?
              (merge {:accessed (-> a .getATime (* 1000) Date.)
                      :modified (-> a .getMTime (* 1000) Date.)
                      :owner    (or (uid->name (.getUId a)) (.getUId a))
@@ -151,17 +151,17 @@
                                      (str (parent-of file-url))
                                      normalize)}))))))
 
-(defn -ls [c uid->name gid->name url recurse? long?]
+(defn -ls [c uid->name gid->name url recurse? attrs?]
   (try (->> (concat (.ls c (str (path url) "/*"))
                     (.ls c (str (path url) "/.*")))
             (sort-by #(.getFilename %))
             (mapcat #(let [f        (.getFilename %)
                            file-url (with-parent url (encode-url f))]
                        (if-not (#{"." ".."} f)              ; skip "." and ".." dirs
-                         (cons (f->kv c uid->name gid->name file-url long? %)
+                         (cons (f->kv c uid->name gid->name file-url attrs? %)
                                (if (and recurse?
                                         (.isDir (.getAttrs %))) ; if isDir=true then isLink=false
-                                 (lazy-seq (-ls c uid->name gid->name file-url recurse? long?))
+                                 (lazy-seq (-ls c uid->name gid->name file-url recurse? attrs?))
                                  nil))
                          nil))))
     (catch Exception e [{:url url :error (str e)}])))
@@ -189,7 +189,7 @@
                                                      (.disconnect s))
 
                                        [uid->name gid->name]
-                                       (map #(if (:long opts)
+                                       (map #(if (:attrs opts)
                                                (try (passwd->id->name (exec->s s %))
                                                     (catch Exception _ {}))
                                                {})
@@ -203,5 +203,5 @@
                                             gid->name
                                             (ensure-not-ends-with-delimiter (normalize url))
                                             (:recurse opts)
-                                            (:long opts)))
+                                            (:attrs opts)))
                                      (catch Exception _ (close-cs)))))

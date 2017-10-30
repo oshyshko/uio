@@ -55,7 +55,7 @@
                                                   (.setContentLength (size from-url))))))
             #(.shutdownNow %)))
 
-(defn -ls [c b k url recurse? long? delimiter marker]
+(defn -ls [c b k url recurse? attrs? delimiter marker]
   (let [^ObjectListing l (.listObjects c (ListObjectsRequest. b k marker (if recurse? nil delimiter) nil))]
     (concat
       ; this page
@@ -65,7 +65,7 @@
                  (for [^S3ObjectSummary s (.getObjectSummaries l)]
                    (cond->  {:url  (bucket-key->url (.getBucketName s) (.getKey s))
                              :size (.getSize s)}
-                            long?
+                            attrs?
                             (merge {:modified (.getLastModified s)})))
                  ; dirs
                  (for [^String s (.getCommonPrefixes l)]
@@ -81,7 +81,7 @@
                        k
                        url
                        recurse?
-                       long?
+                       attrs?
                        delimiter
                        (.getNextMarker l)))))))
 
@@ -96,7 +96,7 @@
                                                       k
                                                       (ensure-ends-with-delimiter url)
                                                       (:recurse opts)
-                                                      (:long opts)
+                                                      (:attrs opts)
                                                       default-delimiter
                                                       nil)) ; nil => list from beginning
 

@@ -91,7 +91,7 @@
                                                           (die "A file with this name already exists" {:url url}))
                                                       nil)))
 
-(defn f->kv [long? ^FileStatus f]
+(defn f->kv [attrs? ^FileStatus f]
   (merge {:url (str (.toUri (.getPath f))
                     (if (.isDirectory f)
                       default-delimiter))}
@@ -99,7 +99,7 @@
          (if (.isFile f)      {:size (.getLen f)})
          (if (.isDirectory f) {:dir  true})
 
-         (if long?
+         (if attrs?
            (merge {:accessed (-> f .getAccessTime Date.)
                    :modified (-> f .getModificationTime Date.)
                    :owner    (-> f .getOwner)
@@ -123,7 +123,7 @@
                                                                (.listStatusIterator fs p))
                                                              (HdfsIterator. fs) ; Iterator<LocatedFileStatus>
                                                              iterator-seq)) ; [FileStatus]
-                                                      (map (partial f->kv (:long opts))) ; [{kv}]
+                                                      (map (partial f->kv (:attrs opts))) ; [{kv}]
                                                       (close-when-realized-or-finalized #(.close fs)))
 
                                                  (:recurse opts)
