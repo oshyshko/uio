@@ -29,23 +29,22 @@ public class Uio {
     private static final IFn LS     = var("uio.uio/ls");
     private static final IFn MKDIR  = var("uio.uio/mkdir");
 
-    public static InputStream       from(String url)                       { return (InputStream)   FROM.invoke(url); }
-    public static InputStream decodeFrom(String url)                       { return (InputStream) FROM_S.invoke(url); }
-    public static OutputStream  encodeTo(String url)                       { return (OutputStream)  TO_S.invoke(url); }
-    public static OutputStream        to(String url)                       { return (OutputStream)    TO.invoke(url); }
-    public static long              size(String url)                       { return (long)          SIZE.invoke(url); }
-    public static boolean         exists(String url)                       { return (boolean)     EXISTS.invoke(url); }
-    public static void            delete(String url)                       {                      DELETE.invoke(url); }
-    public static void             mkdir(String url)                       {                       MKDIR.invoke(url); }
-    public static void              copy(String fromUrl, String toUrl)     {                        COPY.invoke(fromUrl, toUrl); }
-    public static Iterable<Entry> ls(String url)                           { return ls(url, opts()); }
+    public static InputStream       from(String url)                           { return (InputStream)   FROM.invoke(url); }
+    public static InputStream       from(String url, Map<String, Object> opts) { return (InputStream)   FROM.invoke(url, s2o_k2o(opts)); }
+    public static InputStream       from(String url, long offset, long length) { return from(url, opts().offset(offset).length(length)); }
 
-    public static Iterable<Entry> ls(String url, Map<String, Object> opts) {
-        return () -> ((List<Map<Keyword, Object>>) LS.invoke(url, s2o_k2o(opts)))
-                .stream()
-                .map(Uio::k2o_entry)
-                .iterator();
-    }
+    public static InputStream decodeFrom(String url)                           { return (InputStream) FROM_S.invoke(url); }
+    public static OutputStream  encodeTo(String url)                           { return (OutputStream)  TO_S.invoke(url); }
+    public static OutputStream        to(String url)                           { return (OutputStream)    TO.invoke(url); }
+    public static long              size(String url)                           { return (long)          SIZE.invoke(url); }
+    public static boolean         exists(String url)                           { return (boolean)     EXISTS.invoke(url); }
+    public static void            delete(String url)                           {                      DELETE.invoke(url); }
+    public static void             mkdir(String url)                           {                       MKDIR.invoke(url); }
+    public static void              copy(String fromUrl, String toUrl)         {                        COPY.invoke(fromUrl, toUrl); }
+    public static Iterable<Entry>     ls(String url)                           { return ls(url, opts()); }
+    public static Iterable<Entry>     ls(String url, Map<String, Object> opts) { return ((List<Map<Keyword, Object>>) LS.invoke(url, s2o_k2o(opts)))
+                                                                                        .stream()
+                                                                                        .map(Uio::k2o_entry)::iterator; }
 
     private static Map<String, Object>  k2o_s2o(Map<Keyword, ?> k2o) { return k2o.entrySet().stream().collect(Collectors.toMap(kv -> kv.getKey().getName(),       Map.Entry::getValue));}
     private static Map<Keyword, Object> s2o_k2o(Map<String, ?>  s2o) { return s2o.entrySet().stream().collect(Collectors.toMap(kv -> Keyword.intern(kv.getKey()), Map.Entry::getValue));}
@@ -71,7 +70,7 @@ public class Uio {
     }
 
     public static class Opts extends HashMap<String, Object> {
-        public static final Opts RECURSE   = opts("recurse", true);
+        public static final Opts RECURSE = opts("recurse", true);
 
         public Opts add(String k, Object v) {
             put(k, v);
@@ -82,14 +81,13 @@ public class Uio {
                 put(kv.getKey(), kv.getValue());
             return this;
         }
+        public Opts recurse(boolean v) { return add("recurse", v); }
+        public Opts offset (long    v) { return add("offset",  v); }
+        public Opts length (long    v) { return add("length",  v); }
     }
 
-    public static Opts opts() {
-        return new Opts();
-    }
-    public static Opts opts(String k, Object v) {
-        return opts().add(k, v);
-    }
+    public static Opts opts()                   { return new Opts(); }
+    public static Opts opts(String k, Object v) { return opts().add(k, v); }
 
     public static class Entry {
         public final String url;
@@ -98,6 +96,7 @@ public class Uio {
         public final long size;
         public final Map<String, ?> extra;
 
+        @Deprecated
         public Entry(String url, boolean file, boolean dir, long size, Map<String, ?> extra) {
             this.url = url;
             this.dir = dir;
@@ -106,21 +105,12 @@ public class Uio {
             this.extra = extra;
         }
 
-        public String getUrl() {
-            return url;
-        }
-        public boolean isDir() {
-            return dir;
-        }
-        public boolean isFile() {
-            return file;
-        }
-        public long getSize() {
-            return size;
-        }
-        public Map<String, ?> getExtra() {
-            return extra;
-        }
+        public String           getUrl() { return url; }
+        public boolean           isDir() { return dir; }
+        public boolean          isFile() { return file; }
+        public long            getSize() { return size; }
+        @Deprecated
+        public Map<String, ?> getExtra() { return extra; }
 
         public boolean equals(Object o) {
             if (this == o) return true;

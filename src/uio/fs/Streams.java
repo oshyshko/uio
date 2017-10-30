@@ -32,9 +32,7 @@ public class Streams {
         private final AtomicInteger count = new AtomicInteger();
 
         public CountableInputStream(InputStream is) {
-            if (is == null)
-                throw new IllegalArgumentException("Argument `is` can't be null");
-            this.is = is;
+            this.is = assertNotNull(is, "is");
         }
 
         public int read() throws IOException {
@@ -65,10 +63,7 @@ public class Streams {
         private final AtomicInteger count = new AtomicInteger();
 
         public CountableOutputStream(OutputStream os) {
-            if (os == null)
-                throw new NullPointerException("Argument `os` can't be null");
-
-            this.os = os;
+            this.os = assertNotNull(os, "os");
         }
 
         public void write(int b) throws IOException {
@@ -104,10 +99,7 @@ public class Streams {
         private byte[] digest;
 
         public DigestibleInputStream(String algorithm, InputStream is) throws NoSuchAlgorithmException {
-            if (is == null)
-                throw new NullPointerException("Argument `is` can't be null");
-
-            this.is = is;
+            this.is = assertNotNull(is, "is");
             this.md = MessageDigest.getInstance(algorithm);
         }
 
@@ -149,10 +141,7 @@ public class Streams {
         private byte[] digest;
 
         public DigestibleOutputStream(String algorithm, OutputStream os) throws NoSuchAlgorithmException {
-            if (os == null)
-                throw new NullPointerException("Argument `os` can't be null");
-
-            this.os = os;
+            this.os = assertNotNull(os, "os");
             this.md = MessageDigest.getInstance(algorithm);
         }
 
@@ -192,10 +181,7 @@ public class Streams {
         private IFn f;
 
         public Finalizer(IFn f) {
-            if (f == null)
-                throw new NullPointerException("Argument `f` can't be null");
-
-            this.f = f;
+            this.f = assertNotNull(f, "f");
         }
 
         public synchronized void close() throws Exception {
@@ -212,5 +198,48 @@ public class Streams {
         public String toString() {
             return "Finalizer{f=" + f + '}';
         }
+    }
+
+    public static class TakeNInputStream extends InputStream {
+        private final InputStream is;
+        private long remaining;
+
+        public TakeNInputStream(long remaining, InputStream is) {
+            this.is = is;
+            this.remaining = remaining;
+        }
+
+        public int read() throws IOException {
+            if (remaining > 0) {
+                remaining--;
+                return is.read();
+            }
+            return -1;
+        }
+
+        public int read(byte[] b, int off, int len) throws IOException {
+            if (remaining == 0)
+                return -1;
+
+            int n = is.read(b, off, Math.min((int) remaining, len));
+            if (n >= 0)
+                remaining -= n;
+
+            return n;
+        }
+
+        public void close() throws IOException {
+            is.close();
+        }
+
+        public String toString() {
+            return "TakeNInputStream{is=" + is + ", remaining=" + remaining + '}';
+        }
+    }
+
+    private static <T> T assertNotNull(T t, String arg) {
+        if (t == null)
+            throw new NullPointerException("Argument `" + arg + "` can't be null");
+        return t;
     }
 }

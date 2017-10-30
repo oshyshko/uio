@@ -30,9 +30,20 @@
             #(client-bucket-key->x % (host url) (path-no-slash url))
             #(.shutdown %)))
 
-(defmethod from    :s3 [url & args] (wrap-is #(AmazonS3Client. (->creds))
-                                             #(.getObjectContent (.getObject % (host url) (path-no-slash url)))
-                                             #(.shutdown %)))
+(defmethod from    :s3 [url & args] (let [opts  (get-opts default-opts-from url args)
+                                          start (or (:offset opts) 0)
+                                          end   (if (:length opts)
+                                                  (+ start
+                                                     (:length opts))
+                                                  (dec (Long/MAX_VALUE)))]
+                                      (wrap-is #(AmazonS3Client. (->creds))
+                                               #(.getObjectContent
+                                                  (.getObject %
+                                                              (.withRange
+                                                                (GetObjectRequest. (host url) (path-no-slash url))
+                                                                start
+                                                                end)))
+                                               #(.shutdown %))))
 
 (defmethod to      :s3 [url & args] (wrap-os #(AmazonS3Client. (->creds))
                                              #(S3$S3OutputStream. % (host url) (path-no-slash url))

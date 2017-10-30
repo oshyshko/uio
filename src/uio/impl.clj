@@ -8,6 +8,8 @@
            [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer]))
 
 (def default-delimiter "/")
+(def default-opts-from {:offset 0
+                        :length nil})
 (def default-opts-ls   {:recurse false
                         :attrs   false})
 
