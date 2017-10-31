@@ -33,8 +33,7 @@
                (merge {:modified (Date. (.toMillis (.lastModifiedTime attrs)))
                        :owner    (-> attrs .owner .getName)
                        :group    (-> attrs .group .getName)
-                       :perms    (str (if is-dir "d" "-")
-                                      (PosixFilePermissions/toString (.permissions attrs)))}
+                       :perms    (PosixFilePermissions/toString (.permissions attrs))}
                       (if is-symlink
                         {:symlink (->> (Files/readSymbolicLink f) ; resolve absolute + relative link
                                        (.resolve (.resolveSibling f "."))

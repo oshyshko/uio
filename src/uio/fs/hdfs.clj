@@ -104,8 +104,7 @@
                    :modified (-> f .getModificationTime Date.)
                    :owner    (-> f .getOwner)
                    :group    (-> f .getGroup)
-                   :perms    (str (if (.isDirectory f) "d" "-")
-                                  (.getPermission f))}
+                   :perms    (str (.getPermission f))}
 
                   (if (.isSymlink f)   {:symlink     (-> f .getSymlink .toUri str)})
                   (if (.isEncrypted f) {:encrypted   true})

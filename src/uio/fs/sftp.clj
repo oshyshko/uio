@@ -144,7 +144,7 @@
                      :modified (-> a .getMTime (* 1000) Date.)
                      :owner    (or (uid->name (.getUId a)) (.getUId a))
                      :group    (or (gid->name (.getGId a)) (.getGId a))
-                     :perms    (-> a .getPermissionsString)}
+                     :perms    (-> a .getPermissionsString (subs 1))}
 
                     (if (.isLink a)
                       {:symlink (->> (.readlink c (path file-url))
