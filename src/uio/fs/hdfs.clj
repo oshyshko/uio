@@ -1,12 +1,16 @@
+; HDFS
+;
+; hdfs://host/path/to/file.txt
+; hdfs:///path/to/file.txt
+;
+;  :principal       (optional)
+;  :keytab          (optional)  <-- path to a file
+;  :access          (optional)
+;  :secret          (optional)
+;
+;  NOTE: to use `kinit` isntead of keytab file, pass empty creds (`{}` or all nil values)
+;
 (ns uio.fs.hdfs
-  "HDFS -- hdfs://host/path/to/file.txt
-           hdfs:///path/to/file.txt
-
-   :hdfs.keytab.principal  --OR-- env HDFS_KEYTAB_PRINCIPAL              (optional)
-   :hdfs.keytab.path       --OR-- env HDFS_KEYTAB_PATH                   (optional) <-- path to a file
-   :s3.access              --OR-- env AWS_ACCESS / AWS_ACCESS_KEY_ID     (optional)
-   :s3.secret              --OR-- env AWS_SECRET / AWS_SECRET_ACCESS_KEY (optional)
-  "
   (:require [clojure.string :as str]
             [uio.impl :refer :all])
   (:import [java.io IOException]
@@ -20,14 +24,14 @@
   (hasNext  [_] (.hasNext ri))
   (next     [_] (.next ri)))
 
-(defn ->config []
-  (let [c            (Configuration.)
-        nil-if-empty (fn [s] (if (str/blank? s) nil s))
+(defn ->config [^String url]
+  (let [c           (Configuration.)
+        creds       (url->creds url)
 
-        keytab-prin  (nil-if-empty (or (config :hdfs.keytab.principal) (env "HDFS_KEYTAB_PRINCIPAL") (env "KEYTAB_PRINCIPAL")))
-        keytab-path  (nil-if-empty (or (config :hdfs.keytab.path)      (env "HDFS_KEYTAB_PATH")      (env "KEYTAB_FILE")))
-        aws-access   (nil-if-empty (or (config :s3.access)             (env "AWS_ACCESS")            (env "AWS_ACCESS_KEY_ID")))
-        aws-secret   (nil-if-empty (or (config :s3.secret)             (env "AWS_SECRET")            (env "AWS_SECRET_ACCESS_KEY")))]
+        principal   (:principal creds)
+        keytab-path (path (:keytab creds))
+        aws-access  (:access creds)
+        aws-secret  (:secret creds)]
 
     (when (and aws-access aws-secret)
       (.set c "fs.s3a.impl"               "org.apache.hadoop.fs.s3a.S3AFileSystem")
@@ -52,8 +56,8 @@
     (UserGroupInformation/setConfiguration c)
 
     ; only use keytab creds if either user or keytab path was specified, otherwise rely on default auth (e.g. if ran from kinit/Yarn)
-    (when (or keytab-prin keytab-path)
-      (UserGroupInformation/loginUserFromKeytab keytab-prin keytab-path)
+    (when (or principal keytab-path)
+      (UserGroupInformation/loginUserFromKeytab principal keytab-path)
 
       ; TODO is there a way to provide more information about the failure?
       (if-not (UserGroupInformation/isLoginKeytabBased)
@@ -61,35 +65,33 @@
 
     c))
 
-(defn with-hdfs [fs->x]
-  (with-open [fs (FileSystem/newInstance (->config))]
+(defn with-hdfs [^String url fs->x]
+  (with-open [fs (FileSystem/newInstance (->config url))]
     (fs->x fs)))
 
-(defmethod from    :hdfs [url & args] (wrap-is #(FileSystem/newInstance (->config))
-                                               #(.open % (Path. (->url url)))
+(defmethod from    :hdfs [url & args] (wrap-is #(FileSystem/newInstance (->config url))
+                                               #(.open % (Path. (->URI url)))
                                                #(.close %)))
 
-(defmethod to      :hdfs [url & args] (wrap-os #(FileSystem/newInstance (->config))
-                                               #(.create % (Path. (->url url)))
+(defmethod to      :hdfs [url & args] (wrap-os #(FileSystem/newInstance (->config url))
+                                               #(.create % (Path. (->URI url)))
                                                #(.close %)))
 
-(defmethod exists? :hdfs [url & args] (with-hdfs #(.exists % (Path. (->url url)))))
-(defmethod size    :hdfs [url & args] (with-hdfs #(.getLen (.getFileStatus % (Path. (->url url))))))
+(defmethod exists? :hdfs [url & args] (with-hdfs url #(.exists % (Path. (->URI url)))))
+(defmethod size    :hdfs [url & args] (with-hdfs url #(.getLen (.getFileStatus % (Path. (->URI url))))))
+(defmethod delete  :hdfs [url & args] (with-hdfs url #(do (and (not (.delete % (Path. (->URI url)) false))
+                                                               (.exists % (Path. (->URI url)))
+                                                               (die (str "Could not delete: got `false` and the file still exists: " url) ))
+                                                          nil)))
 
-(defmethod delete  :hdfs [url & args] (with-hdfs
-                                        #(do (and (not (.delete % (Path. (->url url)) false))
-                                                  (.exists % (Path. (->url url)))
-                                                  (die "Could not delete: got `false` and the file still exists" {:url url}))
-                                             nil)))
-
-(defmethod mkdir   :hdfs [url & args] (with-hdfs #(do (or (try (.mkdirs % (Path. (->url url)))
-                                                               (catch FileAlreadyExistsException _
-                                                                 (die "A file with this name already exists" {:url url})))
-                                                          (try (.isDirectory (.getFileStatus % (Path. (->url url))))
-                                                               (catch IOException e
-                                                                 (die "Could not make directory: " {:url url} e)))
-                                                          (die "A file with this name already exists" {:url url}))
-                                                      nil)))
+(defmethod mkdir   :hdfs [url & args] (with-hdfs url #(do (or (try (.mkdirs % (Path. (->URI url)))
+                                                                   (catch FileAlreadyExistsException _
+                                                                     (die (str "A file with this name already exists: " url))))
+                                                              (try (.isDirectory (.getFileStatus % (Path. (->URI url))))
+                                                                   (catch IOException e
+                                                                     (die (str "Could not make directory: " url) e)))
+                                                              (die (str "A file with this name already exists: " url)))
+                                                          nil)))
 
 (defn f->kv [attrs? ^FileStatus f]
   (merge {:url (str (.toUri (.getPath f))
@@ -112,8 +114,8 @@
                                         :block-size  (-> f .getBlockSize)})))))
 
 (defmethod ls      :hdfs [url & args] (let [opts (get-opts default-opts-ls url args)
-                                            fs   (FileSystem/newInstance (->config))
-                                            p    (Path. (->url url))]
+                                            fs   (FileSystem/newInstance (->config url))
+                                            p    (Path. (->URI url))]
                                         (cond->> (->> (if (or (str/includes? url "?")
                                                               (str/includes? url "*"))
                                                         (.globStatus fs p)

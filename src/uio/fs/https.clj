@@ -1,5 +1,8 @@
+; HTTP(S)
+;
+; http(s)://host[:port]/path/to/file.txt
+;
 (ns uio.fs.https
-  "HTTP(S) -- http(s)://host[:port]/path/to/file.txt"
   (:require [uio.impl :refer :all])
   (:import [java.net URL]))
 
@@ -7,12 +10,10 @@
   (let [c (.openConnection (URL. url))]
     (try (.setRequestMethod c "HEAD")
          (if-not (<= 200 (.getResponseCode c) 299)
-           (die "Couldn't get size: got non-2XX status code in repsonse from server"
-                {:url url :code (.getResponseCode c)}))
+           (die (str "Couldn't get size: got non-2XX status code " (.getResponseCode c) " in response for URL: " url)))
 
          (if-not (.getHeaderField c "content-length")
-           (die "Couldn't get size: header `content-length` was not set"
-                {:url url :code (.getResponseCode c)}))
+           (die (str "Couldn't get size: header `content-length` was not set, code " (.getResponseCode c) " for URL: " url)))
 
          (.getContentLength c)
          (finally (.disconnect c)))))
@@ -24,8 +25,7 @@
          (cond (<= 200 (.getResponseCode c) 299) true
                (=  404 (.getResponseCode c))     false
                :else
-               (die "Got non-2XX and non 404 status code in repsonse from server"
-                    {:url  url :code (.getResponseCode c)}))
+               (die (str "Got non-2XX and non-404 status code " (.getResponseCode c) " in response for URL: " url)))
 
          (finally (.disconnect c)))))
 

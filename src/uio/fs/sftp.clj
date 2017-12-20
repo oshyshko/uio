@@ -1,18 +1,19 @@
+; SFTP
+;
+; sftp://host[:port]/path/to/file.txt
+;
+;  :user
+;  :known-hosts                 <-- actual content (ssh-rsa)
+;
+;  :pass
+;     -- OR --
+;  :identity                    <-- actual content
+;  :identity-pass   (optional)  <-- (if needed)
+;
+;   NOTE: To get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa [-p <port>] <host>`
+;         and copy the content (skip the line starting with a #).
+;
 (ns uio.fs.sftp
-  "SFTP -- sftp://host[:port]/path/to/file.txt
-
-   :sftp.user              --OR--  env SFTP_USER
-   :sftp.known-hosts       --OR--  env SFTP_KNOWN_HOSTS       <-- actual content (ssh-rsa)
-
-     NOTE: to get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa [-p <port>] <host>`
-           and copy the content (skip the line starting with a #).
-
-   Either (1) or (2) should be present:
-   1) :sftp.pass           --OR--  env SFTP_PASS
-
-   2) :sftp.identity       --OR--  env SFTP_IDENTITY          <-- actual content
-      :sftp.identity.pass  --OR--  env SFTP_IDENTITY_PASS     (optional)
-  "
   (:require [clojure.string :as str]
             [uio.fs.file :as file]
             [uio.impl :refer :all])
@@ -40,46 +41,31 @@
       (die "Got a private key without line separators, tried to reformat it, but failed to match the pattern"))))
 
 (defn ->session+channel [url]
-  (let [user        (or (config :sftp.user)
-                        (env "SFTP_USER")
-                        (env "SSH_USER")                    ; backward compatibility
-                        (die "Either (uio/with {:sftp.user} ... ) or env SFTP_USER was expected to be set"))
+  (let [{:keys [user
+                known-hosts
+                pass
+                identity
+                identity-pass]} (url->creds url)
 
-        known-hosts (or (config :sftp.known-hosts)
-                        (env "SFTP_KNOWN_HOSTS")
-                        (env "SSH_KNOWN_HOSTS")             ; backward compatibility
-                        (die "Either (uio/with {:sftp.known-hosts} ... ) or env SFTP_KNOWN_HOSTS was expected to be set"))
+        _ (if-not user                           (die "Expected :user, but got none"))
+        _ (if-not known-hosts                    (die "Expected :known-hosts, but got none"))
+        _ (if-not (or pass identity)             (die "Expected either :pass or :identity to be present, but got neither"))
+        _ (if (and identity-pass (not identity)) (die "Got :identity-pass without :identity"))
 
-        pass        (or (config :sftp.pass)
-                        (env "SFTP_PASS")
-                        (env "SSH_PASS"))                   ; backward compatibility
+        j (JSch.)
+        _ (.setKnownHosts j (ByteArrayInputStream. (.getBytes known-hosts))) ; seems to be ignored if private key is not encrypted
+        _ (if identity
+            (.addIdentity j "uio-identity"
+                          (.getBytes (reformat-private-key-if-needed identity))
+                          nil
+                          (.getBytes (or identity-pass ""))))
 
-        id          (or (config :sftp.identity)
-                        (env "SFTP_IDENTITY")
-                        (env "SSH_PRIVATE_KEY"))            ; backward compatibility
+        s (.getSession j user (host url) (or (port url) 22)) ; ^Session
+        _ (some->> (.setPassword s pass))
+        _ (.connect s)
 
-        id-pass     (or (config :sftp.identity.pass)
-                        (config :sftp.identity.passphrase)  ; backward compatibility
-                        (env "SFTP_IDENTITY_PASS")
-                        (env "SSH_PASSPHRASE"))             ; backward compatibility
-
-        _           (if-not (or pass id)
-                      (die "Expected :sftp.pass (env SFTP_PASS) or :sftp.identity (SFTP_IDENTITY) to be present, but got neither"))
-
-        j           (JSch.)
-        _           (.setKnownHosts j (ByteArrayInputStream. (.getBytes known-hosts))) ; seems to be ignored if private key is not encrypted
-        _           (if id
-                      (.addIdentity j "uio-identity"
-                                    (.getBytes (reformat-private-key-if-needed id))
-                                    nil
-                                    (.getBytes (or id-pass ""))))
-
-        ^Session s  (.getSession j user (host url) (or (port url) 22))
-        _           (some->> (.setPassword s pass))
-        _           (.connect s)
-
-        ^Channel c  (doto (.openChannel s "sftp")
-                          (.connect))]
+        c (doto (.openChannel s "sftp")                     ; ^Channel
+                (.connect))]
     [s c]))
 
 (defn with-channel [url c->x]
@@ -113,17 +99,15 @@
                                            (catch SftpException e
                                              (if (= ChannelSftp/SSH_FX_NO_SUCH_FILE (.id e))
                                                false
-                                               (die "Couldn't determine file existence" {:url url} e)))))
+                                               (die (str "Couldn't determine file existence " url) e)))))
 
-(defmethod delete  :sftp [url & args] (with-channel url #(try (if (.isDir (.stat % (path url)))
-                                                                (.rmdir % (path url))
-                                                                (.rm % (path url)))
-                                                              (catch Exception e
-                                                                (die (str "Could not delete " (pr-str url) " -- " (.getMessage e)) {} e)))))
+(defmethod delete  :sftp [url & args] (with-channel url #(rethrowing (str "Could not delete " url)
+                                                                     (if (.isDir (.stat % (path url)))
+                                                                       (.rmdir % (path url))
+                                                                       (.rm % (path url))))))
 
-(defmethod mkdir   :sftp [url & args]      (with-channel url #(try (.mkdir % (path url))
-                                                                   (catch Exception e
-                                                                     (die (str "Could not create directory at " (pr-str url)  " -- " (.getMessage e)) {} e)))))
+(defmethod mkdir   :sftp [url & args]      (with-channel url #(rethrowing (str "Could not create directory at " url)
+                                                                          (.mkdir % (path url)))))
 
 (defmethod copy    :sftp [from-url to-url & args] (try-with #(->session+channel to-url)
                                                             (fn [[_ c]] (with-open [is (from from-url)]
@@ -156,7 +140,7 @@
                     (.ls c (str (path url) "/.*")))
             (sort-by #(.getFilename %))
             (mapcat #(let [f        (.getFilename %)
-                           file-url (with-parent url (encode-url f))]
+                           file-url (with-parent url (escape-url f))]
                        (if-not (#{"." ".."} f)              ; skip "." and ".." dirs
                          (cons (f->kv c uid->name gid->name file-url attrs? %)
                                (if (and recurse?

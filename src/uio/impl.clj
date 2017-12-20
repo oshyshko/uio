@@ -3,7 +3,7 @@
             [clojure.string :as str])
   (:import [clojure.lang IFn IPersistentMap Keyword]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream]
-           [java.net URI URLEncoder]
+           [java.net URI URLDecoder URLEncoder]
            [java.security Security]
            [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer]))
 
@@ -13,59 +13,15 @@
 (def default-opts-ls   {:recurse false
                         :attrs   false})
 
-; URL manipulation (not really a part of public API)
-;
-; "foo://user@host:8080/some-dir/file.txt?arg=value" <-- URL
-; "foo"                                              <-- scheme
-;            "host"                                  <-- host
-;                  8080                              <-- port (int or nil)
-;                     "/some-dir/file.txt"           <-- path
-;                      "some-dir/file.txt"           <-- path-no-slash
-;
-(defn ->url         ^URI     [^String url] (let [n (-> url URI. .normalize)]
-                                             (if (str/ends-with? n ":/")
-                                               (str n "//")
-                                               n)))
-
-(defn normalize     ^String  [^String url] (-> url ->url str))
-(defn scheme        ^Keyword [^String url] (-> url ->url .getScheme keyword))
-(defn host          ^String  [^String url] (-> url ->url .getHost))
-(defn port          ^String  [^String url] (let [p (-> url ->url .getPort)]
-                                             (if (not= -1 p) p)))
-(defn path          ^String  [^String url] (-> url ->url .getPath))
-(defn path-no-slash ^String  [^String url] (-> url path (subs 1)))
-(defn filename      ^String  [^String url] (let [s (-> url path)]
-                                             (subs s (inc (str/last-index-of s default-delimiter)))))
-
-(defn encode-url    ^String  [^String url] (.replace (URLEncoder/encode url "UTF-8") "+" "%20"))
-
-; Public API
-(defmulti from    (fn [^String url & args] (scheme url)))      ; url         -> InputStream  -- must be closed by user, use (with-open [...])
-(defmulti to      (fn [^String url & args] (scheme url)))      ; url         -> OutputStream -- must be closed by user, use (with-open [...])
-(defmulti size    (fn [^String url & args] (scheme url)))      ; url         -> Number
-(defmulti exists? (fn [^String url & args] (scheme url)))      ; url         -> boolean
-(defmulti delete  (fn [^String url & args] (scheme url)))      ; url -> args -> nil
-(defmulti ls      (fn [^String url & args] (scheme url)))      ; url -> args -> []
-(defmulti mkdir   (fn [^String url & args] (scheme url)))      ; url -> args -> nil
-(defmulti attrs   (fn [^String url & args] (scheme url)))      ; url -> args -> nil
-(defmulti copy    (fn [^String from-url ^String to-url & args] ; url url -> nil
-                    (->url from-url)                           ; ensure `from-url` is also parsable
-                    (scheme to-url)))                          ; dispatch on `scheme` (and ensure it's also parsable)
-
-; Codecs
-(defmulti ext->is->is (fn [^String ext] ext)) ; ext -> (fn [^InputStream  is] ...wrap into another InputStream)
-(defmulti ext->os->os (fn [^String ext] ext)) ; ext -> (fn [^OutputStream os] ...wrap into another OutputStream)
-
-; Helper fns (for implementations)
+; Helper fns
 
 ; Examples:
 ; (die "MUHAHA!")
 ; (die "Can't find keys" {:what "keys" :to "my car"})
 ; (die "This url is misbehaving" {:url url} ioe)
 (defn die "A shortcut for (throw (ex-info ...))"
-  ([^String msg]           (throw (Exception. msg)))
-  ([^String msg map]       (throw (ex-info msg map)))
-  ([^String msg map cause] (throw (ex-info msg map cause))))
+  ([^String msg]       (throw (Exception. msg)))
+  ([^String msg cause] (throw (Exception. msg cause))))
 
 ; Example:
 ; (let [file "/non-existent/path/to/file.txt"]
@@ -75,25 +31,174 @@
 (defmacro rethrowing
   "Evaluate body, and if any exception is thrown then wrap that
    exception into an ex-info with the specified msg and map before rethrowing it."
-  [msg map & body]
+  [msg & body]
   ; TODO assert msg is a String
-  ; TODO assert map is a map
   `(try (do ~@body)
-        (catch Exception e# (die (str ~msg ". " (.getMessage e#)) ~map e#))))
+        (catch Exception e# (die (str ~msg ". " (.getMessage e#)) e#))))
+
+
+
+; URL manipulation (not really a part of public API)
+;
+; "foo://user@host:8080/some-dir/file.txt?k=v&x=y&x=z"           <- URL
+; "foo"                                                          <- (scheme ...)
+;       "user"                                                   <- (user ...)
+;            "host"                                              <- (host ...)
+;                  8080                                          <- (port ...)   ; (int or nil)
+;                     "/some-dir/file.txt"                       <- (path ...)
+;                               "file.txt"                       <- (filename ...)
+;                                        "k=v&x=y&x=z"           <- (query ...)
+;                                       {:k ["v"], :x ["y" "z"]} <- (query-map ...)
+;
+
+(def pattern-url-single-delimiter #"^([a-zA-Z]?[a-zA-Z0-9+-]+):/([^/].*)?")
+(def pattern-url-no-auth-and-path #"^([a-zA-Z]?[a-zA-Z0-9+-]+)://(\?.*)?")
+
+(defn ->URI          ^URI    [^String url] (rethrowing
+                                             (str "Couldn't parse URL " url)
+                                             (let [fixed-url      (cond (re-matches pattern-url-single-delimiter url)
+                                                                        (str/replace-first url ":/" ":///")
+
+                                                                        (re-matches pattern-url-no-auth-and-path url)
+                                                                        (str/replace-first url "://" ":///")
+
+                                                                        :else url)
+                                                   normalized-uri (.normalize (URI. fixed-url))
+                                                   ]
+                                               (if (= "/" (.getSchemeSpecificPart normalized-uri))
+                                                 (URI. (str/replace-first (str normalized-uri) ":/" ":///"))
+                                                 normalized-uri))))
+
+(defn url?          ^Boolean [^String url] (try (->URI url)
+                                                true
+                                                (catch Exception _ false)))
+
+(defn normalize     ^String  [^String url] (-> url ->URI str))
+(defn scheme        ^String  [^String url] (-> url ->URI .getScheme))
+(defn scheme-k      ^Keyword [^String url] (-> url ->URI .getScheme keyword))
+
+(defn user          ^String  [^String url] (-> url ->URI .getUserInfo))
+(defn host          ^String  [^String url] (-> url ->URI .getHost))
+(defn port          ^Integer [^String url] (let [p (-> url ->URI .getPort)]
+                                             (if (not= -1 p) p)))
+(defn path          ^String  [^String url] (let [p (.getPath (->URI url))]
+                                             (if (and (not (str/blank? p))
+                                                      (not (re-matches pattern-url-no-auth-and-path url)))
+                                               p)))
+(defn filename      ^String  [^String url] (let [s (-> url path)]
+                                             (subs s (inc (str/last-index-of s default-delimiter)))))
+
+(defn escape-url    ^String  [^String s]   (.replace (URLEncoder/encode s "UTF-8") "+" "%20"))
+(defn unescape-url  ^String  [^String s]   (URLDecoder/decode s "UTF-8")) ; TODO replace %20/+?
+
+(defn query         ^String  [^String url] (.getRawQuery (->URI url)))
+(defn query-map              [^String url] (if-let [q (query url)]
+                                             (->> q
+                                                  (#(str/split % #"&")) ; split key-value pairs
+                                                  (map #(str/split % #"=")) ; split key from from values
+                                                  (map #(map unescape-url %))
+                                                  (map (fn [[k v]] [(if-not (str/blank? k) (keyword k))
+                                                                    (if (some? v) [v] [])]))
+                                                  (reduce (fn [s [k v]]
+                                                            (merge-with into s {k v}))
+                                                          {}))
+                                             {}))
+(defn but-query     ^String [^String url] (if-let [q (query url)]
+                                            (subs url 0 (dec (str/index-of url q)))
+                                            url))
+; Public API
+(defmulti from    (fn [^String url & args] (scheme-k url)))    ; -> InputStream  -- must be closed by user, use (with-open [...])
+(defmulti to      (fn [^String url & args] (scheme-k url)))    ; -> OutputStream -- must be closed by user, use (with-open [...])
+(defmulti size    (fn [^String url & args] (scheme-k url)))    ; -> Number
+(defmulti exists? (fn [^String url & args] (scheme-k url)))    ; -> boolean
+(defmulti delete  (fn [^String url & args] (scheme-k url)))    ; -> nil
+(defmulti ls      (fn [^String url & args] (scheme-k url)))    ; -> []
+(defmulti mkdir   (fn [^String url & args] (scheme-k url)))    ; -> nil
+(defmulti attrs   (fn [^String url & args] (scheme-k url)))    ; -> nil
+(defmulti copy    (fn [^String from-url ^String to-url & args] ; -> nil
+                    (->URI from-url)                           ; ensure `from-url` is also parsable
+                    (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parsable)
+
+; Codecs
+(defmulti ext->is->is (fn [^String ext] ext)) ; ext -> (fn [^InputStream  is] ...wrap into another InputStream)
+(defmulti ext->os->os (fn [^String ext] ext)) ; ext -> (fn [^OutputStream os] ...wrap into another OutputStream)
+
+; Other helper fns (for implementations)
 
 (def ^:dynamic *config* {})
 
-(defn config [^Keyword k] (get *config* k))
-(defn env    [^Keyword k] (System/getenv k))
+(defn longest-matching-prefix [cred-prefix-urls s]
+  (->> cred-prefix-urls
+       (filter #(str/starts-with? s %))
+       (sort-by count)
+       last))
+
+; TODO parse env and build config
+; UIO_URL_A=s3://bucket-a?access=...-a&secret=...
+; UIO_URL_B=sftp://host:port?user=...&pass=...&custom-param=...
+;
+(defn creds-url->creds [^String url]
+  {(but-query url)
+   (->> (query-map url)
+        (map (fn [[k [v :as vs]]]
+               (if-not (some? k)        (die (str "Got an empty key in credentials URL starting with: " (but-query url))))
+               (if-not (= 1 (count vs)) (die (str "Got multiple " (pr-str (name k)) " keys in credentials URL starting with: " (but-query url))))
+               [k v]))
+        (into {}))})
+
+; for testing, see `url->creds` for API
+(defn url->creds' [config env url]
+  (let [creds-url  (longest-matching-prefix (filter #(and (string? %)
+                                                          (scheme %))
+                                                    (keys config))
+                                            url)
+        cr         (or (get config creds-url) {})           ; credentials from config for this url
+        c          (or config {})                           ; config -- comes from code, basically it's `creds-url->creds` map + `creds-key->value` backward-compatibility map
+        e          (or env {})                              ; env    -- comes from JVM process (immutable, extracted here for testing)
+
+        nie        (fn [s] (if (str/blank? s) nil s))       ; nil-if-empty
+        die-no-key (fn [k]
+                     (if creds-url
+                       (die (str "Could not locate " k " key in among keys " (keys cr) " for credentials URL " creds-url))
+                       (die (str "Could not locate credentials for URL: " url))))
+
+        eu         (fn [k url-or-path]                      ; ensure-url
+                     (cond (nil? url-or-path)                               nil
+                           (str/starts-with? url-or-path default-delimiter) (str "file://" url-or-path)
+                           (url? url-or-path)                               url-or-path
+                           :else (die (str "Expected URL or path that starts with / for " k ", but got: " url-or-path))))
+        ]
+
+    ; TODO post-validate pairs?
+    ; TODO fail on unknown keys in `cr`?
+    (case (scheme url)
+      ;                          =================== <-- the non-obsolete way to get credentials
+      "hdfs" {:principal          (nie (or (cr :principal)     (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL")))
+              :keytab (eu :keytab (nie (or (cr :keytab)        (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))))
+              :access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
+              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
+
+      "s3"   {:access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID")      (die-no-key :access))
+              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY")  (die-no-key :secret))}
+
+      "sftp" {:user                    (or (cr :user)          (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")               (die-no-key :user))
+              :known-hosts             (or (cr :known-hosts)   (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")        (die-no-key :known-hosts))
+              :pass                    (or (cr :pass)          (c :sftp.pass)                (e "SFTP_PASS")             (e "SSH_PASS"))
+              :identity                (or (cr :identity)      (c :sftp.identity)            (e "SFTP_IDENTITY")         (e "SSH_PRIVATE_KEY"))
+              :identity-pass           (or (cr :identity-pass) (c :sftp.identity.pass)
+                                                               (c :sftp.identity.passphrase) (e "SFTP_IDENTITY_PASS")    (e "SSH_PASSPHRASE"))})))
+
+(defn url->creds [url]
+  (url->creds' *config* (into {} (System/getenv)) url))
 
 (defn wrap-is [->resource resource->is close-resource]
   (let [r       (->resource)
         *closed (atom false)]
     (proxy [FilterInputStream] [(resource->is r)]
-      (close [] (when-not @*closed                          ; TODO remove a chance for race condition
+      (close [] (when-not @*closed                          ; TODO remove race condition chance
                   (try (proxy-super close)
                        (finally (close-resource r)))
-                  (reset! *closed true))))))                ; TODO remove a chance for race condition
+                  (reset! *closed true))))))                ; TODO remove race condition chance
 
 (defn wrap-os [->resource resource->os close-resource]
   (let [r       (->resource)
@@ -106,10 +211,10 @@
       (write ([^bytes bs]               (.write os bs))
              ([^bytes bs offset length] (.write os bs offset length)))
 
-      (close [] (when-not @*closed                          ; TODO remove a chance for race condition
+      (close [] (when-not @*closed                          ; TODO remove race condition chance
                   (try (proxy-super close)
                        (finally (close-resource r)))
-                  (reset! *closed true))))))                ; TODO remove a chance for race condition
+                  (reset! *closed true))))))                ; TODO remove race condition chance
 
 ; Example:
 ; (try-with #(FileInputStream. "file://1.txt")
@@ -124,8 +229,7 @@
 
 (defn get-opts [default-opts url args]                      ; {opts} -> [opt-keys] -> url -> [{opts}] -> {opts}
   (if (< 1 (count args))
-    (die (str "Expected 0 or 1 arguments for `opts`, but got " (count args))
-         {:url url :args args}))
+    (die (str "Expected 0 or 1 arguments for `opts`, but got " (count args) ", for args: " (pr-str args) " and URL: " url)))
 
   (let [opts            (first args)                        ; TODO assert opts is a map or nil + there's no second arg
         unexpected-args (reduce dissoc opts (keys default-opts))]
@@ -195,16 +299,13 @@
                 flush-dir? (cons {:url parent-dir
                                   :dir true}))))))
 
-; codec related fns
+; codec-related fns
 ;
 (defn ensure-has-all-impls [url ext+s->s]
   (if (not-every? (comp some? second) ext+s->s)
-    (die (str "Got at least one unsupported codec. " ; TODO tell which one
-              "Consider adding adding `:codecs false` option or implementing a codec for the unknown extension")
-         {:unsupported (->> (remove second ext+s->s)
-                            (mapv first))
-          :exts        (mapv first ext+s->s)
-          :url         url})
+    (die (str "Got at least one unsupported codec: " (mapv first (remove second ext+s->s))
+              ". Available extensions are: " (mapv first ext+s->s)
+              ". The URL that caused trouble was: " url))
     ext+s->s))
 
 ; Based on file extensions of given url, build a sequence of pairs: extension + stream->stream codec function.
@@ -247,13 +348,13 @@
 ; Example (writing):
 ; (apply-codecs (to "file:///path/to/file.txt.xz.gz")
 ;               (url->ext+s->s ext->os->os "file:///path/to/file.txt.xz.gz"))
-; => OuputStream ...that compresses with XZ, then GZIP and writes to file:///path/to/file.txt.xz.gz
+; => OutputStream ...that compresses with XZ, then GZIP and writes to file:///path/to/file.txt.xz.gz
 ;
 (defn apply-codecs
   "Wrap given `InputStream` or `OutputStream` with codecs specified in `ext+s->s` sequence"
   [s ext+s->s]
   (reduce (fn [s [ext s->s]]
-            (rethrowing (str "Problem with " ext) {:exts (mapv first ext+s->s)}
+            (rethrowing (str "Problem with " ext)
                         (s->s s)))
           s
           ext+s->s))
@@ -395,18 +496,18 @@
 
 ; TODO add examples
 (defn ^InputStream from* [^String url]
-  (rethrowing "Couldn't apply is->is codecs" {:url url}
+  (rethrowing (str "Couldn't apply is->is codecs to " url)
               (apply-codecs (from url) (url->ext+s->s ext->is->is url))))
 
 ; TODO add examples
 (defn ^OutputStream to* [^String url]
-  (rethrowing "Couldn't apply os->os codecs" {:url url}
+  (rethrowing (str "Couldn't apply os->os codecs to" url)
               (apply-codecs (to url) (url->ext+s->s ext->os->os url))))
 
 ; Implementation: defaults
 (defn default-impl [^String url ^String method args]
   (if (scheme url)
-    (die "Not implemented" {:url url :method method :args args})
+    (die (str "Method " (pr-str method) " is not implemented for " url))
     (die (str "Expected a URL with a scheme, but got: \"" url "\". "
               "Available schemes are: "
               (->> method

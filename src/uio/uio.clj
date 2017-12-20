@@ -25,15 +25,20 @@
   `(with-fn ~config (fn [] ~@body)))
 
 ; URL manipulation
-(def ->url                i/->url)
+(def url?                 i/url?)
 (def normalize            i/normalize)
 (def scheme               i/scheme)
+(def user                 i/user)
 (def host                 i/host)
 (def port                 i/port)
 (def path                 i/path)
-(def path-no-slash        i/path-no-slash)
 (def filename             i/filename)
-(def encode-url           i/encode-url)
+(def query                i/query)
+(def query-map            i/query-map)
+(def but-query            i/but-query)
+
+(def escape-url           i/escape-url)
+(def unescape-url         i/unescape-url)
 
 (def with-parent          i/with-parent)
 (def parent-of            i/parent-of)
@@ -56,7 +61,7 @@
 (def close-and-digest     i/close-and-digest)
 
 ; TODO consider replacing the above with something like:
-; (defmacro pullall [ns]
+; (defmacro pull-all [ns]
 ;   `(do ~@(for [[sym var] (ns-publics ns)]
 ;            `(def ~sym ~var))))
 

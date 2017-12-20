@@ -1,3 +1,7 @@
+; Mem
+;
+; mem://path/to/file.txt
+;
 (ns uio.fs.mem
   (:require [uio.impl :refer :all]
             [clojure.string :as str])
@@ -10,7 +14,7 @@
 
 ; TODO implement offset + length
 (defmethod from    :mem [url & args] (ByteArrayInputStream. (or (@*url->bytes url)
-                                                                (die "File not found" {:url url}))))
+                                                                (die (str "File not found:" url)))))
 
 (defmethod to      :mem [url & args] (wrap-os #(ByteArrayOutputStream.)
                                               identity
@@ -18,7 +22,7 @@
 
 (defmethod size    :mem [url & args] (or (some->> (@*url->bytes url)
                                                   (count))
-                                         (die "File not found" {:url url})))
+                                         (die (str "File not found:" url))))
 
 (defmethod exists? :mem [url & args] (some? (@*url->bytes url)))
 

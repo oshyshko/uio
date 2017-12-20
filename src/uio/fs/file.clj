@@ -1,7 +1,9 @@
+; Local FS
+;
+; file:///path/to/file.txt
+;      ^^^ triple slash
+;
 (ns uio.fs.file
-  "Local FS -- file:///path/to/file.txt
-                    ^^^ triple slash
-  "
   (:require [uio.impl :refer :all])
   (:import [java.io File]
            [java.nio.file Files Paths OpenOption LinkOption Path]
@@ -9,15 +11,15 @@
            [java.util Date]))
 
 ; TODO implement :offset + :length + assert all args are known
-(defmethod from    :file [url & args]   (-> url ->url Paths/get (Files/newInputStream    (into-array OpenOption []))))
-(defmethod to      :file [url & args]   (-> url ->url Paths/get (Files/newOutputStream   (into-array OpenOption []))))
-(defmethod size    :file [url & args]   (-> url ->url Paths/get (Files/size)))
-(defmethod exists? :file [url & args]   (-> url ->url Paths/get (Files/exists            (into-array LinkOption []))))
-(defmethod delete  :file [url & args]   (-> url ->url Paths/get (Files/deleteIfExists)))
-(defmethod mkdir   :file [url & args]   (-> url ->url Paths/get (Files/createDirectories (into-array FileAttribute []))))
+(defmethod from    :file [url & args]   (-> url ->URI Paths/get (Files/newInputStream    (into-array OpenOption []))))
+(defmethod to      :file [url & args]   (-> url ->URI Paths/get (Files/newOutputStream   (into-array OpenOption []))))
+(defmethod size    :file [url & args]   (-> url ->URI Paths/get (Files/size)))
+(defmethod exists? :file [url & args]   (-> url ->URI Paths/get (Files/exists            (into-array LinkOption []))))
+(defmethod delete  :file [url & args]   (-> url ->URI Paths/get (Files/deleteIfExists)))
+(defmethod mkdir   :file [url & args]   (-> url ->URI Paths/get (Files/createDirectories (into-array FileAttribute []))))
 
 ; TODO assert all args are known
-(defmethod attrs   :file [url & [opts]] (Files/setPosixFilePermissions (Paths/get (->url url))
+(defmethod attrs   :file [url & [opts]] (Files/setPosixFilePermissions (Paths/get (->URI url))
                                                                                   (PosixFilePermissions/fromString (:perms opts))))
 
 (defn f->kv [file-url attrs? is-dir is-symlink ^Path f]
@@ -44,7 +46,7 @@
 
 (defn -ls [url recurse? attrs?]
   (try
-    (let [s (-> url ->url Paths/get Files/list)]
+    (let [s (-> url ->URI Paths/get Files/list)]
       (->> (iterator-seq (.iterator s))
            (sort-by #(.getFileName %))
            (mapcat #(let [is-symlink (Files/isSymbolicLink %)
