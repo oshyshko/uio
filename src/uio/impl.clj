@@ -54,19 +54,23 @@
 (def pattern-url-single-delimiter #"^([a-zA-Z]?[a-zA-Z0-9+-]+):/([^/].*)?")
 (def pattern-url-no-auth-and-path #"^([a-zA-Z]?[a-zA-Z0-9+-]+)://(\?.*)?")
 
+(defn fix-url [url]
+  (cond (re-matches pattern-url-single-delimiter url)
+        (str/replace-first url ":/" ":///")
+
+        (re-matches pattern-url-no-auth-and-path url)
+        (str/replace-first url "://" ":///")
+
+        :else url))
+
 (defn ->URI          ^URI    [^String url] (rethrowing
                                              (str "Couldn't parse URL " url)
-                                             (let [fixed-url      (cond (re-matches pattern-url-single-delimiter url)
-                                                                        (str/replace-first url ":/" ":///")
-
-                                                                        (re-matches pattern-url-no-auth-and-path url)
-                                                                        (str/replace-first url "://" ":///")
-
-                                                                        :else url)
+                                             (let [fixed-url      (fix-url url)
                                                    normalized-uri (.normalize (URI. fixed-url))
-                                                   ]
-                                               (if (= "/" (.getSchemeSpecificPart normalized-uri))
-                                                 (URI. (str/replace-first (str normalized-uri) ":/" ":///"))
+                                                   normalized-uri-str (str normalized-uri)]
+                                               (if (or (= "/" (.getSchemeSpecificPart normalized-uri))
+                                                       (re-matches pattern-url-single-delimiter normalized-uri-str))
+                                                 (URI. (str/replace-first normalized-uri-str ":/" ":///"))
                                                  normalized-uri))))
 
 (defn url?          ^Boolean [^String url] (try (->URI url)

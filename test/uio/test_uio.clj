@@ -62,6 +62,7 @@
   (normalize "file://host/path/to")                              => "file://host/path/to"
   (normalize "file://host/path/to/")                             => "file://host/path/to/"
   (normalize "file://host/path/to//")                            => "file://host/path/to/"
+  (normalize "file:///path/to//")                                => "file:///path/to/"
 
   (replace-path "sftp://host/path/to/file.txt" "file.txt")       => (throws #"Expected argument")
   (replace-path "sftp://host/path/to/file.txt" "/")              => "sftp://host/"

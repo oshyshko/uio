@@ -30,7 +30,7 @@
 
 (defmethod ls      :mem [url & args] (let [opts     (get-opts default-opts-ls url args)
                                            recurse  (:recurse opts)
-                                           base-dir (ensure-ends-with-delimiter url)]
+                                           base-dir (ensure-ends-with-delimiter (normalize url))]
 
                                        (->> @*url->bytes
                                             (filter (fn [[k _]] (str/starts-with? k base-dir)))
