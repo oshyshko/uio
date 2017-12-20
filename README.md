@@ -1,16 +1,17 @@
-`[uio/uio "1.0"]`
+`[uio/uio "1.1"]`
 
 # uio
 
-`uio` is a Clojure/Java library for accessing HDFS, S3, SFTP and other file systems via a single API.
+`uio` is a [Clojure/Java library](#clojure-api) and a [command line tool](#command-line-tool) for accessing HDFS, S3, SFTP and other file systems.
 
 Features:
 - uses URLs everywhere (there are no relative paths or current working directories)
-- built around 7 core functions, no global state, no def-macros
-- can automatically encode/decode files based on their filename extension
+- minimalistic: built around 7 core functions, has no global state or def-macros
+- can automatically encode/decode files based on their extension
 - allows adding new protocols and codecs from REPL or user code
+- as a command line tool, respects stdin/stdout/stderr streams and exit codes
 
-### Built-in protocols
+## Built-in protocols
 
 |                  |from | to  |size |exists?|delete|mkdir| ls  | URL format                             |
 |------------------|:---:|:---:|:---:|:-----:|:----:|:---:|:---:|----------------------------------------|
@@ -30,18 +31,19 @@ Features:
 Built-in codecs: `.bz2`, `.gz`, `.xz`.
 
 
-### Example
+## Clojure API
 
 For Java examples, see [Example.java](test/uio/Example.java).
 
 ```clojure
+; add [uio/uio "1.1"] to your :dependencies
+
 (ns example
-  (:require [uio.uio :refer [from to size delete mkdir ls copy
-                             from* to* with]))
+  (:require [uio.uio :as uio]))
 
 ; Reading and writing
-(slurp (from "hdfs:///path/to/file.txt"))                   ; => "<content>"
-(spit  (to "s3://bucket/key/with/slashes.txt") "<content>") ; => nil
+(slurp (uio/from "hdfs:///path/to/file.txt"))                     ; => "<content>"
+(spit  (uio/to   "s3://bucket/key/with/slashes.txt") "<content>") ; => nil
 
 ; NOTE: `slurp` reads entire content into memory and it is only suitable for small files.
 
@@ -52,14 +54,14 @@ For Java examples, see [Example.java](test/uio/Example.java).
 ;       This approach will save your code from resource leaks or data corruption.
 
 ; Read the first line of some HTML
-(with-open [is (from "http://www.google.com/")]
+(with-open [is (uio/from "http://www.google.com/")]
   (->> (line-seq (clojure.java.io/reader is))
        (take 1)
        (doall)))
 ; => ("<!doctype ...")
 
 ; Write an image to a file
-(with-open [os (to "file:////path/to/green-dot.gif")]
+(with-open [os (uio/to "file:////path/to/green-dot.gif")]
   (.write os (byte-array [0x47 0x49 0x46 0x38 0x37 0x61 0x01 0x00
                           0x01 0x00 0x80 0x00 0x00 0x00 0xd6 0x7e
                           0x00 0x00 0x00 0x2c 0x00 0x00 0x00 0x00
@@ -68,22 +70,22 @@ For Java examples, see [Example.java](test/uio/Example.java).
 ; => nil
 
 ; Reading and writing with extension codecs
-(slurp (from* "file:///path/to.gz"))                        ; decompress with `gzip`
-(spit  (to*   "file:///path/to.bz2") "<content>")           ; compress with `bzip2`
-(spit  (to*   "file:///path/to.xz.bz2.gz") "<content>")     ; compress with `xz`, 'bzip2' and `gzip`
+(slurp (uio/from* "file:///path/to.gz"))                    ; decompress with `gzip`
+(spit  (uio/to*   "file:///path/to.bz2") "<content>")       ; compress with `bzip2`
+(spit  (uio/to*   "file:///path/to.xz.bz2.gz") "<content>") ; compress with `xz`, 'bzip2' and `gzip`
 
 ; Getting file size
-(size "file:///path/to/file.txt")                           ; => Number
+(uio/size "file:///path/to/file.txt")                       ; => Number
 
 ; Testing a file for existence
-(exists? "file:///path/to/file.txt")                        ; => boolean
+(uio/exists? "file:///path/to/file.txt")                    ; => boolean
 
 ; Deleting individual files and directories
-(delete "file:///path/to/file.txt")                         ; => nil
-(delete "file:///path/to")                                  ; => nil
+(uio/delete "file:///path/to/file.txt")                     ; => nil
+(uio/delete "file:///path/to")                              ; => nil
 
 ; Listing directory contents
-(->> (ls "file:///path/to")                                 ; returns a lazy sequence. Potentially,
+(->> (uio/ls "file:///path/to")                             ; returns a lazy sequence. Potentially,
      (take 4))                                              ; ... a very large one, thus, using
                                                             ; ... (take ...) is not a bad idea.
                                                             ;
@@ -96,7 +98,7 @@ For Java examples, see [Example.java](test/uio/Example.java).
 ;      :size    123}]
 
 ; Combine with `filter` and `map` to get the output you want
-(->> (ls "s3://bucket/path/to/")
+(->> (uio/ls "s3://bucket/path/to/")
      (remove :dir)                                          ; remove dirs
      (map :url)                                             ; leave URLs only
      (take 3))
@@ -105,43 +107,39 @@ For Java examples, see [Example.java](test/uio/Example.java).
 ;     "s3://bucket/path/to/file3.txt"]
 
 ; Listing files recursively
-(->> (ls "s3://bucket/path/to/" {:recurse true})            ; override default value
+(->> (uio/ls "s3://bucket/path/to/" {:recurse true})        ; override default `false` value
      (remove :dir)                                          ; leave files only
      (map :size)                                            ; leave sizes only
      (reduce +))                                            ; get total size (in bytes)
 ; => 12345678
 
 ; Copying a large file from one URL to another:
-(copy "hdfs:///path/to/file.txt"
-      "s3://bucket/key/with/slashes.txt")
+(uio/copy "hdfs:///path/to/file.txt"
+          "s3://bucket/key/with/slashes.txt")
 
-; Defining or overriding existing configuration (e.g. credentials)
-(with {:s3.access "..."
-       :s3.secret "..."}
-  (slurp (from "s3://aaa/key/with/slashes.txt")))
+; Defining credentials for multiple fs and paths
+(uio/with {"s3://"                  {:access ...            ; default credentials for all S3 buckets
+                                     :secret ...}
 
-; Configurations can be nested
-(with {:s3.access "AAA"
-       :s3.secret "BBB"}
+           "s3://bucket-a/"         {:access ...            ; credentials for bucket `bucket-a`
+                                     :secret ...}
 
-  (slurp (from "s3://aaa/key/with/slashes.txt"))            ; use AAA/BBB
+           "hdfs://"                {}                      ; default credentials for HDFS -- use `kinit` (empty {})
 
-  (with {:s3.access "XXX"                                   ; override :s3.access and :s3.secret for
-         :s3.secret "YYY"}
-    (slurp (from "s3://xxx/key/with/slashes.txt")))         ; access with XXX/YYY credentials
+           "hdfs://site-a"          {:principal "guest"     ; use `guest` account to access `site-a`
+                                     :keytab    "file:///path/to/guest.keytab"}
 
-  (slurp (from "s3://aaa/key/with/slashes.txt")))           ; access with AAA/BBB credentials
+           "hdfs://site-a/home/joe" {:principal "joe"       ; however, override access to a specific folder for `joe`
+                                     :keytab    "file:///path/to/joe.keytab"} }
 
-; Also, default values for :s3.access and :s3.secret can be set via environment
-; variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
-;
-; NOTE: `(with ...)` will always override configuration set via environment variables.
-;
+  ; TODO put your code here
+  )
 ```
+
 See [Implementation-specific details](#implementation-specific-details) for the full list of configuration keys
 and corresponding environment variables.
 
-### Adding your implementation
+### Adding your protocol
 ```clojure
 (ns myns
   (:require [uio.uio :refer [from to size delete mkdir ls
@@ -164,7 +162,7 @@ and corresponding environment variables.
 ;       For an example, see implementation of `copy` for S3.
 ```
 
-### Adding your filename extension codec
+### Adding your extension codec
 ```clojure
 (ns example
   (:require [uio.uio :refer [ext->is->is ext->os->os])
@@ -190,14 +188,11 @@ Your local file system, e.g. `file:///home/user`.
 
 ### HDFS
 ```clojure
-(with {:hdfs.keytab.principal ...     ; HDFS_KEYTAB_PRINCIPAL              (optional)
-       :hdfs.keytab.path      ...     ; HDFS_KEYTAB_PATH                   (optional) <-- path to a file
-       :s3.access             ...     ; AWS_ACCESS / AWS_ACCESS_KEY_ID     (optional)
-       :s3.secret             ...}    ; AWS_SECRET / AWS_SECRET_ACCESS_KEY (optional)
+(uio/with {"hdfs://" {:principal "joe"
+                      :keytab    "file:///path/to/eytab"}}
   ...)
 
-; NOTE: to use Kerberos (`kinit`) authentication, leave empty values in
-;       :hdfs.keytab.principal (KEYTAB_PRINCIPAL) and :hdfs.keytab.path (KEYTAB_FILE).
+; NOTE: to use Kerberos (`kinit`) authentication, leave empty value for `{"hdfs://" {}}`.
 
 ; NOTE: to disable implementation of HDFS and remove all depended JARs, add this exclusion to your `project.clj`:
 :dependencies [[uio/uio "1.1" :exclusions [org.apache.hadoop/hadoop-common
@@ -209,10 +204,10 @@ Your local file system, e.g. `file:///home/user`.
 ; NOTE: HTTP implementation of `size` sends a HEAD request and expects
 ;       the server to set `content-length` header in response
 ;
-(size "https://github.com/apple-touch-icon-180x180.png")
+(uio/size "https://github.com/apple-touch-icon-180x180.png")
 ; => 21128
 
-(size "http://www.google.com/")
+(uio/size "http://www.google.com/")
 ; => clojure.lang.ExceptionInfo: Couldn't get size: header `content-length`
 ;    is not set {:url "http://www.google.com/"}
 
@@ -221,17 +216,17 @@ Your local file system, e.g. `file:///home/user`.
 ;       - false -- if the server replies with 404 status code
 ;       - throws exceptions in all other cases (IO errors, permissions etc.)
 ;
-(exists? "http://www.google.com")
+(uio/exists? "http://www.google.com")
 ; => true
 
-(exists? "http://www.google.com/asdf")
+(uio/exists? "http://www.google.com/asdf")
 ; => false
 
-(exists? "http://www.google.co")
+(uio/exists? "http://www.google.co")
 ; => clojure.lang.ExceptionInfo: Got non-2XX and non 404 status code
 ;    in repsonse from server {:url "http://www.google.co", :code 301}
 
-(exists? "http://www.google.cop")
+(uio/exists? "http://www.google.cop")
 ; => java.net.UnknownHostException: www.google.cop
 ```
 
@@ -240,31 +235,31 @@ Your local file system, e.g. `file:///home/user`.
 ; An in-memory filesystem. Useful for unit testing.
 
 (ns myns
-  (:require [uio.uio :refer [from* to*]]
+  (:require [uio.uio :as uio]
             [uio.fs.mem :as mem))
 
-(mem/reset)                                                 ; deletes all files from memory
+(mem/reset)                                                  ; deletes all files from memory
 
-(spit (to* "mem:///path/to/file.txt.gz") "<content>")       ; => nil
-(slurp (from* "mem:///path/to/file.txt.gz"))                ; => "<content>"
+(spit  (uio/to*   "mem:///path/to/file.txt.gz") "<content>") ; => nil
+(slurp (uio/from* "mem:///path/to/file.txt.gz"))             ; => "<content>"
 ```
 
 ### Res
 ```clojure
 ; Provides access to files in classpath. Only `from` is implemented.
 
-(slurp (from "res:///uio/uio.clj"))                         ; ...source code of uio.clj as a String
+(slurp (uio/from "res:///uio/uio.clj"))                      ; ...source code of uio.clj as a String
 
 ```
 ```java
-// the (from ...) part in the code above is equivalent to Java code:
+// the (uio/from ...) part in the code above is equivalent to Java code:
 InputStream is = clojure.java.api.Clojure.class.getResourceAsStream("/uio/uio.clj");
 ```
 
 ### S3
 ```clojure
-(with {:s3.access ...                 ; AWS_ACCESS / AWS_ACCESS_KEY_ID
-       :s3.secret ...}                ; AWS_SECRET / AWS_SECRET_ACCESS_KEY
+(uio/with {"s3://" {:access ...
+                    :secret ...}}
   ...)
 
 ; NOTE: S3 doesn't have directories: `ls` will simulate directories in output, `mkdir` will do nothing.
@@ -272,23 +267,67 @@ InputStream is = clojure.java.api.Clojure.class.getResourceAsStream("/uio/uio.cl
 
 ### SFTP
 ```clojure
-(with {:sftp.user          ...  ; SFTP_USER
-       :sftp.pass          .... ; SFTP_PASS
-       :sftp.identity      ...  ; SFTP_IDENTITY       <-- actual content
-       :sftp.identity.pass ...  ; SFTP_IDENTITY_PASS  (optional)
-       :sftp.known-hosts   ...} ; SFTP_KNOWN_HOSTS    <-- actual content
+(uio/with {"sftp://" {:user          ...
+                      :known-hosts   ...    ; <-- actual content
+                      :pass          ...
+                      :identity      ...    ; <-- actual content
+                      :identity-pass ... }  ; optional
   ...)
 
 ; NOTE: to get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa -p <port> <host>`
 ;      and copy the content (skip the line starting with a #).
 
-; NOTE: either :sftp.pass (SFTP_PASS) or :sftp.identity (SFTP_IDENTITY) should be present.
+; NOTE: either :pass or :identity should be present.
 ```
 
-## Building
+## Command line tool
 
-```bash
-$ ./scripts/install.sh
+```
+$ uio --help
+Usage: cat file.txt | uio to       fs:///path/to/file.txt
+       cat file.txt | uio to*      fs:///path/to/file.txt.gz
+
+                      uio from     fs:///path/to/file.txt    > file.txt
+                      uio from*    fs:///path/to/file.txt.gz > file.txt
+
+                      uio size     fs:///path/to/file.txt
+                      uio exists?  fs:///path/to/file.txt
+                      uio delete   fs:///path/to/file.txt
+                      uio mkdir    fs:///path/to/dir/
+
+                      uio copy     fs:///source/path/to/file.txt fs:///destination/path/to/file.txt
+
+                      uio ls [-lh] fs:///path/to/dir/
+                              -l - list in long format (show attributes)
+                              -h - print sizes in human readable format
+
+                      uio --help - print this help
+
+Common flags:                 -v - print stack traces and annoying logs to stderr
+
+Experimental (will change in future!):
+                      uio ls [-rs] fs:///path/to/dir/
+                              -r - list files and directories recursively
+                              -s - print total file size, file and directory count
+
+
+Version: [uio/uio "1.1"]
+FS:      file hdfs http https mem res s3 sftp
+Codecs:  bz2 gz xz
+```
+
+To build `uio` command from source, install Lein and run this:
+```
+$ ./scripts/build.sh
+
+...
+
+$ cp ./target/uio ~/bin            <-- copy `uio` binary to a directory that is in your PATH (e.g. ~/bin)
+
+$ uio
+Expected a command, but got none.
+To see examples, run `uio --help`.
+
 ```
 
 ## License
