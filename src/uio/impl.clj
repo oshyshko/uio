@@ -245,9 +245,8 @@
 
 ; helper fns to support directories and recursive operations
 
-; TODO rename to `ends-with-slash?`
 (defn ends-with-delimiter? [url]
-  (str/ends-with? (path url) default-delimiter))
+  (str/ends-with? (or (path url) "") default-delimiter))
 
 (defn ensure-ends-with-delimiter [url]
   (if (ends-with-delimiter? url)

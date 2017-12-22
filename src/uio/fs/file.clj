@@ -42,7 +42,7 @@
                                        (.normalize)
                                        (#(str "file://" % (if is-dir default-delimiter))))})))))
 
-    (catch Exception e {:url file-url :error (str e)})))
+    (catch Exception e {:url file-url :error e})))
 
 (defn -ls [url recurse? attrs?]
   (try
@@ -60,7 +60,7 @@
 
            (close-when-realized-or-finalized #(.close s))))
 
-    (catch Exception e [{:url url :error (str e)}])))
+    (catch Exception e [{:url url :error e}])))
 
 (defmethod ls      :file [url & args] (let [opts (get-opts default-opts-ls url args)]
                                         (-ls (normalize url)

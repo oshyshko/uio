@@ -22,6 +22,8 @@
            [java.util.zip GZIPOutputStream GZIPInputStream]
            [java.util Date]))
 
+(def default-timeout-ms 10000)
+
 (defn reformat-private-key-if-needed
   "JSch expects a private key with new-line characters as described in RFC-4716.
    However, it's usefull to pass private keys around as a single-line string where new-lines are replaced with space.
@@ -61,11 +63,12 @@
                           (.getBytes (or identity-pass ""))))
 
         s (.getSession j user (host url) (or (port url) 22)) ; ^Session
+        _ (.setTimeout s default-timeout-ms)
         _ (some->> (.setPassword s pass))
         _ (.connect s)
 
         c (doto (.openChannel s "sftp")                     ; ^Channel
-                (.connect))]
+                (.connect default-timeout-ms))]
     [s c]))
 
 (defn with-channel [url c->x]
@@ -142,13 +145,13 @@
             (mapcat #(let [f        (.getFilename %)
                            file-url (with-parent url (escape-url f))]
                        (if-not (#{"." ".."} f)              ; skip "." and ".." dirs
-                         (cons (f->kv c uid->name gid->name file-url attrs? %)
-                               (if (and recurse?
-                                        (.isDir (.getAttrs %))) ; if isDir=true then isLink=false
-                                 (lazy-seq (-ls c uid->name gid->name file-url recurse? attrs?))
+                           (cons (f->kv c uid->name gid->name file-url attrs? %)
+                                 (if (and recurse?
+                                          (.isDir (.getAttrs %))) ; if isDir=true then isLink=false
+                                   (lazy-seq (-ls c uid->name gid->name file-url recurse? attrs?))
                                  nil))
                          nil))))
-    (catch Exception e [{:url url :error (str e)}])))
+    (catch Exception e [{:url url :error e}])))
 
 (defn passwd->id->name [s]
   (->> (str/split-lines s)
@@ -162,7 +165,7 @@
 (defn exec->s [s line]
   (let [c (doto (.openChannel s "exec")
                 (.setCommand line)
-                (.connect))]
+                (.connect default-timeout-ms))] ; if not set, this will hang forever for hosts that don't allow shell
     (try
       (slurp (.getInputStream c))
       (finally (.disconnect c)))))
