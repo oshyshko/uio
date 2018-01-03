@@ -29,7 +29,7 @@
         creds       (url->creds url)
 
         principal   (:principal creds)
-        keytab-path (path (:keytab creds))
+        keytab-path (some-> (:keytab creds) path)
         aws-access  (:access creds)
         aws-secret  (:secret creds)]
 

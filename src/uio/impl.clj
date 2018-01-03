@@ -64,7 +64,7 @@
         :else url))
 
 (defn ->URI          ^URI    [^String url] (rethrowing
-                                             (str "Couldn't parse URL " url)
+                                             (str "Couldn't parse URL " (pr-str url))
                                              (let [fixed-url      (fix-url url)
                                                    normalized-uri (.normalize (URI. fixed-url))
                                                    normalized-uri-str (str normalized-uri)]
