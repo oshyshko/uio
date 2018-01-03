@@ -20,6 +20,45 @@
 
 (def exit-1 "exit-1")
 
+(def default-config-url "res:///uio/main/default_config.clj")
+
+(defn load-config [url]
+  (->> (clojure.edn/read-string (slurp (uio/from url)))
+       (map (fn [[k v]]
+              [k (assoc v :origin url)]))
+       (into (array-map))))
+
+(defn home-config-url []
+  (let [home           (System/getProperty "user.home")     ; e.g. "/Users/joe"
+        _              (if (str/blank? home)
+                         (die "Couldn't get user home directory"))
+        config-dir-url (uio/with-parent (impl/replace-path "file:///" home) ".uio")
+        config-url     (uio/with-parent config-dir-url "config.clj")]
+    config-url))
+
+(defn load-or-save-home-config->url []
+  (let [config-url (home-config-url)]
+    (uio/mkdir (uio/parent-of config-url))
+    (uio/attrs (uio/parent-of config-url) {:perms "rwx------"})
+    (when-not (uio/exists? config-url)
+      (uio/copy default-config-url config-url))
+    (uio/attrs config-url {:perms "rw-------"})
+    config-url))
+
+(defn load-s3cfg []
+  (let [s3cfg-url (uio/with-parent
+                    (impl/replace-path "file:///" (System/getProperty "user.home"))
+                    ".s3cfg")]
+    (->> (str/split (slurp (uio/from s3cfg-url)) #"\n")
+         (remove #(#{\# \;} (first %)))
+         (map #(let [[k v] (str/split % #"\s?=\s?" 2)]      ; TODO respect comments. Use clojure-ini?
+                 [(keyword k) v]))
+         (into {})
+         ((fn [m]
+            {"s3://" {:origin s3cfg-url
+                      :access (or (:access_key m) (die "Can't find :access_key in ~/.s3cfg. Skipping"))
+                      :secret (or (:secret_key m) (die "Can't find :secret_key in ~/.s3cfg. Skipping"))}})))))
+
 (def ymd-hm-utc (doto (SimpleDateFormat. "yyyy-MM-dd hh:mm")
                       (.setTimeZone (TimeZone/getTimeZone "UTC"))))
 
@@ -92,7 +131,8 @@
   (println)
   (println "Version:" (get-version))
   (println "FS:     " (str/join " " (map name (:fs     (impl/list-available-implementations)))))
-  (println "Codecs: " (str/join " " (map name (:codecs (impl/list-available-implementations))))))
+  (println "Codecs: " (str/join " " (map name (:codecs (impl/list-available-implementations)))))
+  (println "Config: " (home-config-url)))
 
 (defn run [[op a b :as args]
            {:keys [recurse
@@ -177,43 +217,6 @@
 ;
 ; TODO fix S3: s3cmd ls s3://geopulse-ingest/teamcity/build_383/00/
 ;
-
-(def default-config-url "res:///uio/main/default_config.clj")
-
-(defn load-config [url]
-  (->> (clojure.edn/read-string (slurp (uio/from url)))
-       (map (fn [[k v]]
-              [k (assoc v :origin url)]))
-       (into (array-map))))
-
-(defn load-or-save-home-config->url []
-  (let [home           (System/getProperty "user.home")     ; e.g. "/Users/joe"
-        _              (if (str/blank? home)
-                         (die "Couldn't get user home directory"))
-        config-dir-url (uio/with-parent (impl/replace-path "file:///" home) ".uio")
-        _              (uio/mkdir config-dir-url)
-        _              (uio/attrs config-dir-url {:perms "rwx------"})
-        config-url     (uio/with-parent config-dir-url "config.clj")
-        _              (when-not (uio/exists? config-url)
-                         (uio/copy default-config-url
-                                   config-url))
-        _              (uio/attrs config-url {:perms "rw-------"})]
-    config-url))
-
-(defn load-s3cfg []
-  (let [s3cfg-url (uio/with-parent
-                    (impl/replace-path "file:///" (System/getProperty "user.home"))
-                    ".s3cfg")]
-    (->> (str/split (slurp (uio/from s3cfg-url)) #"\n")
-         (remove #(#{\# \;} (first %)))
-         (map #(let [[k v] (str/split % #"\s?=\s?" 2)]      ; TODO respect comments. Use clojure-ini?
-                 [(keyword k) v]))
-         (into {})
-         ((fn [m]
-            {"s3://" {:origin s3cfg-url
-                      :access (or (:access_key m) (die "Can't find :access_key in ~/.s3cfg. Skipping"))
-                      :secret (or (:secret_key m) (die "Can't find :secret_key in ~/.s3cfg. Skipping"))}})))))
-
 (defn -main [& args]
   (let [cli (parse-opts args
                         [["-r" "--recurse"        "Make `ls` recursive"                                     :default false]
