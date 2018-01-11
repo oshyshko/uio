@@ -56,8 +56,8 @@
                                                                 end)))
                                                #(.shutdown %))))
 
-(defmethod to      :s3 [url & [args]] (wrap-os #(AmazonS3Client. (->creds-provider url))
-                                               #(S3$S3OutputStream. % (host url) (path-no-slash url) (some-> args :acl acl->enum))
+(defmethod to      :s3 [url & [opts]] (wrap-os #(AmazonS3Client. (->creds-provider url))
+                                               #(S3$S3OutputStream. % (host url) (path-no-slash url) (some-> opts :acl acl->enum))
                                                #(.shutdown %)))
 
 (defmethod exists? :s3 [url & args] (with-s3 url (fn [c b k] (.doesObjectExist c b k))))

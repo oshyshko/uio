@@ -499,14 +499,16 @@
 ;  `(with-fn ~config (fn [] ~@body)))
 
 ; TODO add examples
-(defn ^InputStream from* [^String url]
+(defn ^InputStream from* [^String url & args]
   (rethrowing (str "Couldn't apply is->is codecs to " url)
-              (apply-codecs (from url) (url->ext+s->s ext->is->is url))))
+              (apply-codecs (apply from (cons url args))
+                            (url->ext+s->s ext->is->is url))))
 
 ; TODO add examples
-(defn ^OutputStream to* [^String url]
+(defn ^OutputStream to* [^String url & args]
   (rethrowing (str "Couldn't apply os->os codecs to" url)
-              (apply-codecs (to url) (url->ext+s->s ext->os->os url))))
+              (apply-codecs (apply to (cons url args))
+                            (url->ext+s->s ext->os->os url))))
 
 ; Implementation: defaults
 (defn default-impl [^String url ^String method args]
