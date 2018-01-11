@@ -152,38 +152,39 @@
 
 ; for testing, see `url->creds` for API
 (defn url->creds' [config env url]
-  (let [creds-url  (longest-matching-prefix (filter #(and (string? %)
-                                                          (scheme %))
-                                                    (keys config))
-                                            url)
-        cr         (or (get config creds-url) {})           ; credentials from config for this url
-        c          (or config {})                           ; config -- comes from code, basically it's `creds-url->creds` map + `creds-key->value` backward-compatibility map
-        e          (or env {})                              ; env    -- comes from JVM process (immutable, extracted here for testing)
+  (let [longest-url (longest-matching-prefix (filter #(and (string? %)
+                                                           (scheme %))
+                                                     (keys config))
+                                             url)
+        cr          (or (get config longest-url) {})        ; credentials (value) extracted by URL (key)
+        c           (or config {})                          ; config -- for compatibility, credentials stored as keys
+        e           (or env {})                             ; env    -- for compatibility, comes from JVM process (immutable, extracted as arg for testing)
 
-        nie        (fn [s] (if (str/blank? s) nil s))       ; nil-if-empty
-        die-no-key (fn [k]
-                     (if creds-url
-                       (die (str "Could not locate " k " key in among keys " (keys cr) " for credentials URL " creds-url))
-                       (die (str "Could not locate credentials for URL: " url))))
+        nie         (fn [s] (if (str/blank? s) nil s))      ; nil-if-empty
+        die-no-key  (fn [k]
+                      (if longest-url
+                        (die (str "Could not locate " k " key in among keys " (keys cr) " for credentials URL " longest-url))
+                        (die (str "Could not locate credentials for URL: " url))))
 
-        eu         (fn [k url-or-path]                      ; ensure-url
-                     (cond (nil? url-or-path)                               nil
-                           (str/starts-with? url-or-path default-delimiter) (str "file://" url-or-path)
-                           (url? url-or-path)                               url-or-path
-                           :else (die (str "Expected URL or path that starts with / for " k ", but got: " url-or-path))))
+        eu          (fn [k url-or-path]                     ; ensure-url
+                      (cond (nil? url-or-path) nil
+                            (str/starts-with? url-or-path default-delimiter) (str "file://" url-or-path)
+                            (url? url-or-path) url-or-path
+                            :else (die (str "Expected URL or path that starts with / for " k ", but got: " url-or-path))))
         ]
 
     ; TODO post-validate pairs?
     ; TODO fail on unknown keys in `cr`?
     (case (scheme url)
-      ;                          =================== <-- the non-obsolete way to get credentials
+      ;       <current>                        <current>          <obsolete>                    <obsolete>                  <obsolete>
       "hdfs" {:principal          (nie (or (cr :principal)     (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL")))
               :keytab (eu :keytab (nie (or (cr :keytab)        (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))))
               :access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
               :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
 
       "s3"   {:access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID")      (die-no-key :access))
-              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY")  (die-no-key :secret))}
+              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY")  (die-no-key :secret))
+              :role-arn                    (cr :role-arn)}
 
       "sftp" {:user                    (or (cr :user)          (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")               (die-no-key :user))
               :known-hosts             (or (cr :known-hosts)   (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")        (die-no-key :known-hosts))

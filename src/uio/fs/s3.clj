@@ -4,13 +4,15 @@
 ;
 ; :access
 ; :secret
+; :role-arn
 ;
 (ns uio.fs.s3
-  (:require [uio.impl :refer :all])
-  (:import [com.amazonaws.auth BasicAWSCredentials]
+  (:require [uio.impl :refer :all]
+            [clojure.string :as str])
+  (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider]
+           [com.amazonaws.internal StaticCredentialsProvider]
            [com.amazonaws.services.s3 AmazonS3Client]
-           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing ObjectMetadata S3ObjectSummary GetObjectRequest]
-           [com.amazonaws.services.s3.transfer TransferManager]
+           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList]
            [uio.fs S3$S3OutputStream]))
 
 (defn path-no-slash [^String url]
@@ -19,14 +21,25 @@
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter k))
 
-(defn ^BasicAWSCredentials ->creds [url]
-  (let [{:keys [access secret]} (url->creds url)]
-    (BasicAWSCredentials. access secret)))
+(defn ^AWSCredentialsProvider ->creds-provider [url]
+  (let [{:keys [access secret role-arn] :as creds-spec} (url->creds url)
+        creds (BasicAWSCredentials. access secret)]
+    (if role-arn
+      (STSAssumeRoleSessionCredentialsProvider. creds ^String role-arn "uio-s3-session")
+      (StaticCredentialsProvider. creds))))
 
 (defn with-s3 [url client-bucket-key->x]
-  (try-with #(AmazonS3Client. (->creds url))
+  (try-with #(AmazonS3Client. (->creds-provider url))
             #(client-bucket-key->x % (host url) (path-no-slash url))
             #(.shutdown %)))
+
+; See https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html?shortFooter=true#canned-acl
+(defn acl->enum [^String s]
+  (let [m (->> (CannedAccessControlList/values)
+               (map #(vector (str %) %))
+               (into {}))]
+    (or (m s)
+        (die (str "Couldn't find canned ACL " (pr-str s) ". Available options are: " (str/join ", " (map pr-str (sort (keys m)))))))))
 
 (defmethod from    :s3 [url & args] (let [opts  (get-opts default-opts-from url args)
                                           start (or (:offset opts) 0)
@@ -34,7 +47,7 @@
                                                   (+ start
                                                      (:length opts))
                                                   (dec (Long/MAX_VALUE)))]
-                                      (wrap-is #(AmazonS3Client. (->creds url))
+                                      (wrap-is #(AmazonS3Client. (->creds-provider url))
                                                #(.getObjectContent
                                                   (.getObject %
                                                               (.withRange
@@ -43,26 +56,15 @@
                                                                 end)))
                                                #(.shutdown %))))
 
-(defmethod to      :s3 [url & args] (wrap-os #(AmazonS3Client. (->creds url))
-                                             #(S3$S3OutputStream. % (host url) (path-no-slash url))
-                                             #(.shutdown %)))
+(defmethod to      :s3 [url & [args]] (wrap-os #(AmazonS3Client. (->creds-provider url))
+                                               #(S3$S3OutputStream. % (host url) (path-no-slash url) (some-> args :acl acl->enum))
+                                               #(.shutdown %)))
 
 (defmethod exists? :s3 [url & args] (with-s3 url (fn [c b k] (.doesObjectExist c b k))))
 (defmethod size    :s3 [url & args] (with-s3 url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
 (defmethod delete  :s3 [url & args] (with-s3 url (fn [c b k] (.deleteObject c b k))))
 
 (defmethod mkdir   :s3 [url & args] (do :nothing nil))      ; S3 doesn't support directories
-
-(defmethod copy    :s3 [from-url to-url & args]
-  (try-with #(TransferManager. (->creds to-url))
-            #(with-open [is (from from-url)]
-               (.waitForCompletion (.upload %
-                                            (host to-url)
-                                            (path-no-slash to-url)
-                                            is
-                                            (doto (ObjectMetadata.)
-                                                  (.setContentLength (size from-url))))))
-            #(.shutdownNow %)))
 
 (defn -ls [c b k url recurse? attrs? delimiter marker]
   (let [^ObjectListing l (.listObjects c (ListObjectsRequest. b k marker (if recurse? nil delimiter) nil))]
@@ -95,7 +97,7 @@
                        (.getNextMarker l)))))))
 
 (defmethod ls      :s3 [url & args] (let [opts (get-opts default-opts-ls url args)
-                                          c    (AmazonS3Client. (->creds url))
+                                          c    (AmazonS3Client. (->creds-provider url))
                                           b    (host url)
                                           k    (path-no-slash (ensure-ends-with-delimiter url))]
                                       (cond->> (close-when-realized-or-finalized

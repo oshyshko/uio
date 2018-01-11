@@ -115,8 +115,9 @@
                         :access    "access-c11"
                         :secret    "secret-c11"}
 
-             "s3://"   {:access "access-c11"
-                        :secret "secret-c11"}
+             "s3://"   {:access   "access-c11"
+                        :secret   "secret-c11"
+                        :role-arn "role-arn-c11"}
 
              "sftp://" {:user          "user-c11"
                         :known-hosts   "known-hosts-c11"
@@ -184,8 +185,9 @@
                             :access    "access-c10"
                             :secret    "secret-c10"}
 
-                 "s3://"   {:access "access-c10"
-                            :secret "secret-c10"}
+                 "s3://"   {:access   "access-c10"
+                            :secret   "secret-c10"
+                            :role-arn nil}
 
                  "sftp://" {:user          "user-c10"
                             :known-hosts   "known-hosts-c10"
@@ -211,8 +213,9 @@
                              :access    "access-e10"
                              :secret    "secret-e10"}
 
-                  "s3://"   {:access "access-e10"
-                             :secret "secret-e10"}
+                  "s3://"   {:access   "access-e10"
+                             :secret   "secret-e10"
+                             :role-arn nil}
 
                   "sftp://" {:user          "user-e10"
                              :known-hosts   "known-hosts-e10"
@@ -234,8 +237,9 @@
                              :access    "access-e09"
                              :secret    "secret-e09"}
 
-                  "s3://"   {:access "access-e09"
-                             :secret "secret-e09"}
+                  "s3://"   {:access   "access-e09"
+                             :secret   "secret-e09"
+                             :role-arn nil}
 
                   "sftp://" {:user          "user-e09"
                              :known-hosts   "known-hosts-e09"

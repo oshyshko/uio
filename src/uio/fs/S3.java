@@ -17,12 +17,9 @@ public class S3 {
         private static final int BUFFER_SIZE = 5 * 1024 * 1024; // 5MB -- required minimum by S3 API
 
         private final AmazonS3Client c;
-        private final String bucket;
-        private final String key;
+        private final InitiateMultipartUploadResult init;
 
         private final List<PartETag> tags = new ArrayList<>();
-
-        private final InitiateMultipartUploadResult res;
 
         private final byte[] buffer = new byte[BUFFER_SIZE];
         private final MessageDigest inDigest = MessageDigest.getInstance("MD5");
@@ -33,12 +30,11 @@ public class S3 {
         private int bufferOffset;
         private int partIndex;
 
-        public S3OutputStream(AmazonS3Client c, String bucket, String key) throws NoSuchAlgorithmException {
+        public S3OutputStream(AmazonS3Client c, String bucket, String key, CannedAccessControlList cannedAclOrNull) throws NoSuchAlgorithmException {
             this.c = c;
-            this.bucket = bucket;
-            this.key = key;
 
-            res = c.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key));
+            init = c.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key)
+                    .withCannedACL(cannedAclOrNull)); // setting only here, not setting in UploadPartRequest
         }
 
         public void write(int b) throws IOException {
@@ -79,9 +75,9 @@ public class S3 {
             String localPartEtag = hex(localPartDigest.digest());
             try {
                 UploadPartRequest upr = new UploadPartRequest()
-                        .withBucketName(bucket)
-                        .withKey(key)
-                        .withUploadId(res.getUploadId())
+                        .withBucketName(init.getBucketName())
+                        .withKey(init.getKey())
+                        .withUploadId(init.getUploadId())
                         .withPartNumber(partIndex + 1)
                         .withInputStream(new ByteArrayInputStream(buffer, 0, bufferOffset))
                         .withPartSize(bufferOffset)
@@ -114,7 +110,9 @@ public class S3 {
                             " - read   : " + read + "\n" +
                             " - written: " + written);
 
-                String remoteEtag = c.completeMultipartUpload(new CompleteMultipartUploadRequest(bucket, key, res.getUploadId(), tags)).getETag();
+                String remoteEtag = c.completeMultipartUpload(
+                        new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags)
+                ).getETag();
 
                 localPartDigest.reset();
                 for (PartETag tag : tags) {
@@ -141,11 +139,11 @@ public class S3 {
         }
 
         private void abort() {
-            c.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, res.getUploadId()));
+            c.abortMultipartUpload(new AbortMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId()));
         }
 
         public String toString() {
-            return "S3OutputStream{bucket='" + bucket + '\'' + ", key='" + key + '\'' + '}';
+            return "S3OutputStream{bucket='" + init.getBucketName() + '\'' + ", key='" + init.getKey() + '\'' + '}';
         }
     }
 }
