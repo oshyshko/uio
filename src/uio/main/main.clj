@@ -24,8 +24,6 @@
 
 (defn load-config [url]
   (->> (clojure.edn/read-string (slurp (uio/from url)))
-       (map (fn [[k v]]
-              [k (assoc v :origin url)]))
        (into (array-map))))
 
 (defn home-config-url []
@@ -55,8 +53,7 @@
                  [(keyword k) v]))
          (into {})
          ((fn [m]
-            {"s3://" {:origin s3cfg-url
-                      :access (or (:access_key m) (die "Can't find :access_key in ~/.s3cfg. Skipping"))
+            {"s3://" {:access (or (:access_key m) (die "Can't find :access_key in ~/.s3cfg. Skipping"))
                       :secret (or (:secret_key m) (die "Can't find :secret_key in ~/.s3cfg. Skipping"))}})))))
 
 (def ymd-hm-utc (doto (SimpleDateFormat. "yyyy-MM-dd hh:mm")
@@ -201,6 +198,17 @@
 
     "copy"    (uio/copy a b) ; TODO check url-b
 
+    "_export" (->> impl/*config*
+                   (map (fn [[url m]]
+                          (str url
+                               (if (seq m)
+                                 (str "?"
+                                      (str/join "&"
+                                                (for [[k v] m]
+                                                  (str (uio/escape-url (name k)) "=" (uio/escape-url v)))))))))
+                   sort
+                   (run! println))
+
     (do (errln (if op
                  (str "Unknown command: " op)
                  "Expected a command, but got none."))
@@ -254,7 +262,7 @@
 
                        ; override with values ~/.s3cfg when {"s3://" {}}
                        (#(merge %
-                                (when (= (dissoc (get % "s3://") :origin) {})
+                                (when (= {} (get % "s3://"))
                                   (try (load-s3cfg)
                                        (catch Exception e (when (-> cli :options :verbose)
                                                             (errln "Couldn't load ~/.s3cfg, skipping:" e))))))))
