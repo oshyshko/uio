@@ -82,7 +82,7 @@
 
 (defn op-or-alias->op [op]
   (or ({"cat"  "from"
-        "cat*" "from"
+        "cat*" "from*"
         "rm"   "delete"
         "cp"   "copy"} op)
       op))
