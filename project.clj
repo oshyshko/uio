@@ -1,4 +1,4 @@
-(defproject uio/uio "1.1-SNAPSHOT"
+(defproject uio/uio "1.1"
   :description "uio is a Clojure/Java library for accessing HDFS, S3, SFTP and other file systems via a single API."
 
   :repositories {"cloudera" "https://repository.cloudera.com/content/groups/cdh-releases-rcs"}
