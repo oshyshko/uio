@@ -1,8 +1,8 @@
-`[uio/uio "1.1"]`
+`[uio/uio "1.1"]` -- [see what's new](CHANGELOG.md)
 
 # uio
 
-`uio` is a [Clojure/Java library](#clojure-api) and a [command line tool](#command-line-tool) for accessing HDFS, S3, SFTP and other file systems.
+`uio` is a [Clojure library](#clojure-api) and a [command line tool](#command-line-tool) for accessing HDFS, S3, SFTP and other file systems.
 
 Features:
 - uses URLs everywhere (there are no relative paths or current working directories)
@@ -32,8 +32,6 @@ Built-in codecs: `.bz2`, `.gz`, `.xz`.
 
 
 ## Clojure API
-
-For Java examples, see [Example.java](test/uio/Example.java).
 
 ```clojure
 ; add [uio/uio "1.1"] to your :dependencies
@@ -314,6 +312,7 @@ Experimental (will change in future!):
 Version: [uio/uio "1.1"]
 FS:      file hdfs http https mem res s3 sftp
 Codecs:  bz2 gz xz
+Config:  file:///Users/john/.uio/config.clj
 ```
 
 To build `uio` command from source, install Lein and run this:
