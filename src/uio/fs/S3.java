@@ -30,6 +30,8 @@ public class S3 {
         private int bufferOffset;
         private int partIndex;
 
+        private boolean closed;
+
         public S3OutputStream(AmazonS3Client c, String bucket, String key, CannedAccessControlList cannedAclOrNull) throws NoSuchAlgorithmException {
             this.c = c;
 
@@ -42,6 +44,7 @@ public class S3 {
         }
 
         public void write(byte[] bs, int offset, int length) throws IOException {
+            assertOpen();
             inDigest.update(bs, offset, length);
 
             while (length != 0) {
@@ -66,7 +69,12 @@ public class S3 {
             }
         }
 
-        private void _flush(boolean isLastPart) throws IOException {
+        private void assertOpen() throws IOException {
+            if (closed)
+                throw new IOException("Can't write to closed stream");
+        }
+
+        private void _flush(boolean isLastPart) {
             outDigest.update(buffer, 0, bufferOffset);
 
             localPartDigest.reset();
@@ -99,7 +107,10 @@ public class S3 {
             }
         }
 
-        public void close() throws IOException {
+        public void close() {
+            if (closed)
+                return;
+
             _flush(true);
             try {
                 String read = hex(inDigest.digest());
@@ -128,6 +139,7 @@ public class S3 {
                 abort(); // TODO delete remote file if exception happened after `c.completeMultipartUpload(...)`
                 throw e;
             }
+            closed = true;
         }
 
         private static String hex(byte[] bs) {
