@@ -5,7 +5,7 @@
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream]
            [java.net URI URLDecoder URLEncoder]
            [java.security Security]
-           [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer]))
+           [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer Streams Streams$ConcatInputStream Streams$FinalizingInputStream]))
 
 (def default-delimiter "/")
 (def default-opts-from {:offset 0
@@ -403,6 +403,9 @@
   (Streams$NullOutputStream.))
 
 
+(defn ^InputStream ->finalizing [^InputStream is]
+  (Streams$FinalizingInputStream. is))
+
 ; Count how many bytes came through a stream.
 ;
 ; Example:
@@ -509,6 +512,9 @@
   (rethrowing (str "Couldn't apply os->os codecs to" url)
               (apply-codecs (apply to (cons url args))
                             (url->ext+s->s ext->os->os url))))
+
+(defn ^InputStream concat-with [url->is urls]
+  (Streams$ConcatInputStream. url->is urls))
 
 ; Implementation: defaults
 (defn default-impl [^String url ^String method args]
