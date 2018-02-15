@@ -309,7 +309,7 @@ Expected a command, but got none.
 To see examples, run `uio --help`.
 ```
 
-Let's usage and examples:
+Let's see some examples:
 ```
 $ uio --help
 Usage: cat file.txt | uio to       fs:///path/to/file.txt
@@ -389,13 +389,16 @@ $ cat ~/.uio/config.clj
  ; NOTE: see also "Defining credentials for multiple fs and paths" at https://github.com/oshyshko/uio
  }
 ```
-The the default config will make `uio` use `kinit` for HDFS and load configs from `s3cmd`s command config (`~/.s3cfg`).
-If you're using one of them alredy, `uio` should work out of the box.
+If you're already using `hadoop` or `hdfs` command together with `kinit`, or `s3cmd` command alone,
+`uio` should work out of the box. The the default config will make `uio` use `kinit` for HDFS
+and try to load configs from `~/.s3cfg`.
 
-You can also configure `uio` to use different credentials based on URL prefix.
-For example you can leave `kinit` as the default auth mechanism for all HDFS with `"hdfs://" {}` and override access to a specific cluster with `"hdfs://my-cluster/" {...}`, or, if you have just one cluster and you want to use different credentials for your home directory, this can be done with something like with `"hdfs:///home/john" {...}` (notice the triple slash).
+You can also configure `uio` to use credentials based on URL prefix.
+For example you can leave `kinit` as default auth mechanism for all HDFS URLs
+by adding `"hdfs://" {}` entry, and then override access to a specific clusters or paths with
+URL prefix like `"hdfs://my-cluster/my-path/" {...}`.
 
-This also works for S3 buckets and SSH URLs.
+This will also work for S3 buckets/paths and SSH hosts/ports/paths.
 
 You can override multiple URL prefixes, the rule of thumb is: the longest URL prefix that matches your URL wins.
 
