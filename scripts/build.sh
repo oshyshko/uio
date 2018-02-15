@@ -2,4 +2,4 @@
 
 set -xue
 
-lein do clean, midje, install, bin
+lein do clean, midje, bin

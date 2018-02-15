@@ -280,6 +280,36 @@ InputStream is = clojure.java.api.Clojure.class.getResourceAsStream("/uio/uio.cl
 
 ## Command line tool
 
+### Building
+To build `uio` command from source, you will need:
+- [JDK8](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html)
+- [git](https://git-scm.com/downloads)
+- [lein](https://leiningen.org/)
+
+Then run:
+```
+$ git clone git@github.com:oshyshko/uio.git
+...
+
+$ cd uio
+
+$ ./scripts/build.sh
+...
+Created /Users/John/uio/target/uio-1.1.jar
+Created /Users/John/uio/target/uio.jar
+Creating standalone executable: /Users/John/uio/target/uio
+
+$ cp ./target/uio ~/bin            <-- copy `uio` binary to a directory that is in your PATH (e.g. ~/bin)
+```
+### Configuration, usage and examples
+Run once without args to create a default config in `~/.uio/config.clj`
+```
+$ uio
+Expected a command, but got none.
+To see examples, run `uio --help`.
+```
+
+Let's usage and examples:
 ```
 $ uio --help
 Usage: cat file.txt | uio to       fs:///path/to/file.txt
@@ -315,19 +345,59 @@ Codecs:  bz2 gz xz
 Config:  file:///Users/john/.uio/config.clj
 ```
 
-To build `uio` command from source, install Lein and run this:
-```
-$ ./scripts/build.sh
-
-...
-
-$ cp ./target/uio ~/bin            <-- copy `uio` binary to a directory that is in your PATH (e.g. ~/bin)
-
-$ uio
-Expected a command, but got none.
-To see examples, run `uio --help`.
+Let's see what's in the config.
 
 ```
+$ cat ~/.uio/config.clj
+```
+
+```clojure
+{
+ ; For `kinit` authentication, use:
+ ; "hdfs://" {}
+ ;
+ ; For keytab principal + path authentication, use:
+ ; "hdfs://" {:principal "joe"
+ ;            :keytab    "file:///path/to/principal.keytab"}
+ ;
+ ;
+ "hdfs://" {}
+
+ ; To use credentials from `~/.s3cfg`, add:
+ ; "s3://" {}
+ ;
+ ; To use access/secret pair, add:
+ ; "s3://"   {:access "access-key"
+ ;            :secret "secret-key"}
+ ;
+ ;
+ "s3://"   {}
+
+ ; "sftp://" {:user          "joe"
+ ;            :pass          "secret"                         ; optional
+ ;            :known-hosts   "<ssh-rsa ...>"                  ; actual content (ssh-rsa)
+ ;            :identity      "<identity-value>"               ; optional, actual content
+ ;            :identity-pass "<identity-password-value>" }    ; optional, password for identity (if needed)
+ ;
+ ; NOTE: to get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa [-p <port>] <host>`
+ ;       and copy the content (skip the line starting with a #).
+ ;
+ "sftp://" {:user        ""
+            :known-hosts ""
+            :pass        ""}
+
+ ; NOTE: see also "Defining credentials for multiple fs and paths" at https://github.com/oshyshko/uio
+ }
+```
+The the default config will make `uio` use `kinit` for HDFS and load configs from `s3cmd`s command config (`~/.s3cfg`).
+If you're using one of them alredy, `uio` should work out of the box.
+
+You can also configure `uio` to use different credentials based on URL prefix.
+For example you can leave `kinit` as the default auth mechanism for all HDFS with `"hdfs://" {}` and override access to a specific cluster with `"hdfs://my-cluster/" {...}`, or, if you have just one cluster and you want to use different credentials for your home directory, this can be done with something like with `"hdfs:///home/john" {...}` (notice the triple slash).
+
+This also works for S3 buckets and SSH URLs.
+
+You can override multiple URL prefixes, the rule of thumb is: the longest URL prefix that matches your URL wins.
 
 ## License
 
