@@ -7,12 +7,17 @@
                               replace-path
                               scheme-k
                               url->creds'
-                              url->ext+s->s]]
+                              url->seq-of-ext+s->s
+                              ->URI]]
             [midje.sweet :refer :all])
   (:import (java.util.zip GZIPOutputStream)
            (org.apache.commons.compress.compressors CompressorStreamFactory)))
 
 (facts "URL manipulation fns are working"
+  (-> "file:///Virtual+Box/gentoo.vdi" ->URI .getRawPath)        => "/Virtual%20Box/gentoo.vdi"
+  (-> "file:///Virtual+Box/gentoo.vdi" path)                     => "/Virtual Box/gentoo.vdi"
+  (-> "file:///Virtual+Box/gentoo+%25.vdi" path)                 => "/Virtual Box/gentoo %.vdi"
+
   (scheme    "foo://user@host:8080/some-dir/file.txt?arg=value") => "foo"
   (scheme-k  "foo://user@host:8080/some-dir/file.txt?arg=value") => :foo
 
@@ -33,18 +38,26 @@
   (port      "foo://user@host/some-dir/file.txt?arg=value")      => nil
   (path      "foo://user@host:8080/some-dir/file.txt?arg=value") => "/some-dir/file.txt"
 
+  (path      "foo://host/+ %20")                                 => (throws #"Illegal character in path")
+  (path      "file:///path/to/file+1%2B%25.txt")                 => "/path/to/file 1+%.txt"
+
+  (filename "file:///path/to/file+1%2B%25.txt")                  => "file 1+%.txt"
+  (filename "file:///path/to")                                   => "to"
+  (filename "file:///path/to/")                                  => nil
+
   (query     "foo://")                                           => nil
   (query     "foo:///")                                          => nil
   (query     "foo://user@host:8080/some-dir/file.txt?arg=value") => "arg=value"
+  (query     "foo://host/file.txt?arg=value&arg2=+:/")           => "arg=value&arg2=%20:/"
 
   (query-map "foo://")                                           => {}
   (query-map "foo:///")                                          => {}
-  (query-map "foo://user@host:8080?k=v&k2=v1&k2=v2&no-value=&=no-key&encoded%3Dkey=encoded%26value")
-                                                                 => {:k           ["v"]
-                                                                     :k2          ["v1" "v2"]
-                                                                     :no-value    []
-                                                                     nil          ["no-key"]
-                                                                     :encoded=key ["encoded&value"]}
+  (query-map "foo://user@host:8080?k=v&k2=v1&k2=v2&no-value=&=no-key&encoded%3Dkey%25=encoded%26value+%20%25")
+                                                                 => {:k            ["v"]
+                                                                     :k2           ["v1" "v2"]
+                                                                     :no-value     []
+                                                                     nil           ["no-key"]
+                                                                     :encoded=key% ["encoded&value  %"]}
 
   (but-query "foo://")                                           => "foo://"
   (but-query "foo:///")                                          => "foo:///"
@@ -52,8 +65,19 @@
                                                                  => "foo://user@host:8090"
 
   (parent-of "file:///path/to/file.txt")                         => "file:///path/to/"
-  (parent-of "/path/to/file.txt")                                => "/path/to/"
-  (parent-of "path/to/file.txt")                                 => "path/to/"
+  (parent-of "file:///path/to/")                                 => "file:///path/"
+  (parent-of "file:///path/")                                    => "file:///"
+  (parent-of "file:///path")                                     => "file:///"
+  (parent-of "file:///")                                         => nil
+  (parent-of "file://")                                          => nil
+  
+  (parent-of "/path/to/file.txt")                                => (throws #"Expected a scheme")
+  (parent-of "path/to/file.txt")                                 => (throws #"Expected a scheme")
+
+  (parent-of "file:///path/to/file+1%2B%25.txt")                 => "file:///path/to/"
+
+  (with-parent "file://path/to/" "file 1+%.txt")                 => "file://path/to/file+1%2B%25.txt"
+  (with-parent "file:///" "file 1+%.txt")                        => "file:///file+1%2B%25.txt"
 
   (normalize "file://")                                          => "file:///"
   (normalize "file:///")                                         => "file:///"
@@ -64,13 +88,22 @@
   (normalize "file://host/path/to//")                            => "file://host/path/to/"
   (normalize "file:///path/to//")                                => "file:///path/to/"
 
-  (replace-path "sftp://host/path/to/file.txt" "file.txt")       => (throws #"Expected argument")
-  (replace-path "sftp://host/path/to/file.txt" "/")              => "sftp://host/"
+  (replace-path "fs:///path/to/file+1%2B%25.txt" "/path/to/")    => "fs:///path/to/"
+  (replace-path "fs://host/path/to/file.txt" "/")                => "fs://host/"
+  (replace-path "fs://user@host:123/path/to/file.txt?a=b#frag"
+                "/another/path/to/file.txt")                     => "fs://user@host:123/another/path/to/file.txt?a=b#frag"
 
-  (replace-path "sftp://user@host:123/path/to/file.txt" "")      => (throws #"Expected argument")
-  (replace-path "sftp://user@host:123/path/to/file.txt"
-                "/another/path/to/file.txt")                     => "sftp://user@host:123/another/path/to/file.txt"
+  (replace-path "fs:///" nil)                                    => "fs://"
+  (replace-path "fs:/" nil)                                      => "fs://"
+  (replace-path "fs:" nil)                                       => (throws #"Couldn't parse URL")
+  (replace-path "fs:///" "/path")                                => "fs:///path"
+  (replace-path "fs:///1+%20?+=%20#%20" "/path/1 +%.txt")        => "fs:///path/1+%2B%25.txt?%20=%20#%20"
 
+  (replace-path "fs://user@host:123/path/to/file.txt" "")        => "fs://user@host:123"
+  (replace-path "fs://user@host:123/path/to/file.txt" nil)       => "fs://user@host:123"
+  (replace-path "fs://user@host:123/path/to/file.txt?a=b" "")    => "fs://user@host:123?a=b"
+  (replace-path "fs://host/path/to/file.txt" "file.txt")         => (throws #"Expected argument")
+  
   (ensure-not-ends-with-delimiter "test")                        => "test"
   (ensure-not-ends-with-delimiter "test/")                       => "test"
   (ensure-not-ends-with-delimiter "test///")                     => "test")
@@ -251,18 +284,14 @@
       (url->creds' {} e09 "s3://")   => (cr-e09 "s3://")
       (url->creds' {} e09 "sftp://") => (cr-e09 "sftp://")) ))
 
-(facts "In-memory implementation works"
-  (spit  (to   "mem:///greeetings.txt") "hello") => nil
-  (slurp (from "mem:///greeetings.txt"))         => "hello")
-
 (facts "Deducing of (de)compression codecs works, even for chained ones"
-  (map first (url->ext+s->s ext->is->is "hdfs:///far-away/and/well-archived.xz.bz2.gz")) => [:gz :bz2 :xz]
-  (map first (url->ext+s->s ext->os->os "sftp:///far-away/and/well-archived.xz.bz2.gz")) => [:gz :bz2 :xz]
-  (map first (url->ext+s->s ext->os->os "mem:///dont-forget-leading-slash.txt.gz"))      => [:gz]
+  (map first (url->seq-of-ext+s->s ext->is->is "hdfs:///far-away/and/well-archived.xz.bz2.gz")) => [:gz :bz2 :xz]
+  (map first (url->seq-of-ext+s->s ext->os->os "sftp:///far-away/and/well-archived.xz.bz2.gz")) => [:gz :bz2 :xz]
+  (map first (url->seq-of-ext+s->s ext->os->os "mem:///dont-forget-leading-slash.txt.gz"))      => [:gz]
 
   ; unknown codecs between known ones
-  (url->ext+s->s ext->is->is "hdfs:///far-away/and/well-archived.xz.ufoz.bz2.gz") => (throws Exception #"Got at least one unsupported codec")
-  (url->ext+s->s ext->os->os "sftp:///far-away/and/well-archived.xz.ufoz.bz2.gz") => (throws Exception #"Got at least one unsupported codec"))
+  (url->seq-of-ext+s->s ext->is->is "hdfs:///far-away/and/well-archived.xz.ufoz.bz2.gz") => (throws Exception #"Got at least one unsupported codec")
+  (url->seq-of-ext+s->s ext->os->os "sftp:///far-away/and/well-archived.xz.ufoz.bz2.gz") => (throws Exception #"Got at least one unsupported codec"))
 
 (facts "(De)compression works, even for chained extensions"
   (dorun
@@ -287,59 +316,68 @@
 
 (facts "intercalate-with-dirs works"
   ; base case
-  (intercalate-with-dirs [])                         => []
+  (intercalate-with-dirs "fs:///"[])                          => nil
 
   ; base case + 1
-  (intercalate-with-dirs [{:url "1.txt"}])           => [{:url "1.txt"}]
+  (intercalate-with-dirs "fs:///"
+                         [{:url "fs:///1.txt" :size 1}])      => [{:url "fs:///1.txt" :size 1}]
 
-  ; base case + 2 + flush
-  (intercalate-with-dirs [{:url "1.txt"}
-                          {:url "123/2.txt"}])       => [{:url "1.txt"}
-                                                         {:url "123/" :dir true}
-                                                         {:url "123/2.txt"}]
-  ; simple case + continue + skip matching last flushed dir
-  (intercalate-with-dirs "123/" [{:url "1.txt"}
-                                 {:url "123/2.txt"}]) => [{:url "1.txt"}
-                                                          {:url "123/2.txt"}]
-  ; simple case + continue
-  (intercalate-with-dirs "123/" [{:url "456/1.txt"}
-                                 {:url "456/2.txt"}]) => [{:url "456/" :dir true}
-                                                          {:url "456/1.txt"}
-                                                          {:url "456/2.txt"}]
+  ; base case + 2
+  (intercalate-with-dirs "fs:///"
+                         [{:url "fs:///1.txt"     :size 1}
+                          {:url "fs:///a/b/2.txt" :size 2}])  => [{:url "fs:///1.txt" :size 1}
+                                                                  {:url "fs:///a/" :dir true}
+                                                                  {:url "fs:///a/b/" :dir true}
+                                                                  {:url "fs:///a/b/2.txt" :size 2}]
+
+  (intercalate-with-dirs "fs:///"
+                         [{:url "fs:///a/1.txt" :size 1}
+                          {:url "fs:///b/2.txt" :size 2}])    => [{:url "fs:///a/" :dir true}
+                                                                  {:url "fs:///a/1.txt" :size 1}
+                                                                  {:url "fs:///b/" :dir true}
+                                                                  {:url "fs:///b/2.txt" :size 2}]
+  ; base case + 2
+  (intercalate-with-dirs "fs:///"
+                         [{:url "fs:///1.txt"   :size 1}
+                          {:url "fs:///a/2.txt" :size 2}])    => [{:url "fs:///1.txt" :size 1}
+                                                                  {:url "fs:///a/" :dir true}
+                                                                  {:url "fs:///a/2.txt" :size 2}]
   ; complex case
-  (intercalate-with-dirs [{:url "1.txt"}
-                          {:url "123.txt"}
+  (intercalate-with-dirs "fs:///"
+                         [{:url "fs:///1.txt"         :size 1}
+                          {:url "fs:///123.txt"       :size 2}
                           ; 123
-                          {:url "123/1.txt"}
-                          {:url "123/2.txt"}
-                          {:url "123/3.txt"}
+                          {:url "fs:///123/1.txt"     :size 3}
+                          {:url "fs:///123/2.txt"     :size 4}
+                          {:url "fs:///123/3.txt"     :size 5}
                           ; 123/123
-                          {:url "123/123/1.txt"}
+                          {:url "fs:///123/123/1.txt" :size 6}
                           ; 456
-                          {:url "456/1.txt"}
+                          {:url "fs:///456/1.txt"     :size 7}
                           ; 456/123
-                          {:url "456/123/1.txt"}
-                          {:url "456/123/2.txt"}
+                          {:url "fs:///456/123/1.txt" :size 8}
+                          {:url "fs:///456/123/2.txt" :size 9}
                           ; 456/456
-                          {:url "456/456/3.txt"}
-                          {:url "456/5.txt"}
-                          {:url "789.txt"}])         => [{:url "1.txt"}
-                                                         {:url "123.txt"}
-                                                         {:url "123/"     :dir true}
-                                                         {:url "123/1.txt"}
-                                                         {:url "123/2.txt"}
-                                                         {:url "123/3.txt"}
-                                                         {:url "123/123/" :dir true}
-                                                         {:url "123/123/1.txt"}
-                                                         {:url "456/"     :dir true}
-                                                         {:url "456/1.txt"}
-                                                         {:url "456/123/" :dir true}
-                                                         {:url "456/123/1.txt"}
-                                                         {:url "456/123/2.txt"}
-                                                         {:url "456/456/" :dir true}
-                                                         {:url "456/456/3.txt"}
-                                                         {:url "456/5.txt"}
-                                                         {:url "789.txt"}])
+                          {:url "fs:///456/456/3.txt" :size 10}
+                          {:url "fs:///456/5.txt"     :size 11}
+                          {:url "fs:///789.txt"       :size 12}]) => [{:url "fs:///1.txt"         :size 1}
+                                                                      {:url "fs:///123.txt"       :size 2}
+                                                                      {:url "fs:///123/"          :dir true}
+                                                                      {:url "fs:///123/1.txt"     :size 3}
+                                                                      {:url "fs:///123/2.txt"     :size 4}
+                                                                      {:url "fs:///123/3.txt"     :size 5}
+                                                                      {:url "fs:///123/123/"      :dir true}
+                                                                      {:url "fs:///123/123/1.txt" :size 6}
+                                                                      {:url "fs:///456/"          :dir true}
+                                                                      {:url "fs:///456/1.txt"     :size 7}
+                                                                      {:url "fs:///456/123/"      :dir true}
+                                                                      {:url "fs:///456/123/1.txt" :size 8}
+                                                                      {:url "fs:///456/123/2.txt" :size 9}
+                                                                      {:url "fs:///456/456/"      :dir true}
+                                                                      {:url "fs:///456/456/3.txt" :size 10}
+                                                                      {:url "fs:///456/5.txt"     :size 11}
+                                                                      {:url "fs:///789.txt"       :size 12}]
+  )
 
 (facts "encode + decode works"
   (let [s "hello world"]
@@ -350,3 +388,8 @@
     ; check built-in filters
     (map #(count (encode % (.getBytes s)))
          [:gz :bz2 :xz]) => [31 48 68]))
+
+(facts "escape-url + unescape-url works"
+  (escape-url   "1 +%")     => "1+%2B%25"
+  (unescape-url "1+%2B%25") => "1 +%"
+  (unescape-url "1 +%20")   => (throws #"Can't unescape-url string containing space"))
