@@ -32,8 +32,8 @@
  ;       and copy the content (skip the line starting with a #).
  ;
  "sftp://" {:user        ""
-            :known-hosts ""
-            :pass        ""}
+            :pass        ""
+            :known-hosts ""}
 
  ; NOTE: see also "Defining credentials for multiple fs and paths" at https://github.com/oshyshko/uio
  }

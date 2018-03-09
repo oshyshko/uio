@@ -1,6 +1,5 @@
 (ns uio.main.test-main
-  (:require [uio.uio :refer :all]
-            [uio.main.main :refer :all]
+  (:require [uio.main.main :refer :all]
             [midje.sweet :refer :all]))
 
 (facts "size->human-size works"
