@@ -15,6 +15,8 @@
 (def copy                 i/copy)
 (def from*                i/from*)
 (def to*                  i/to*)
+(def concat-with          i/concat-with)
+
 (def ext->is->is          i/ext->is->is)
 (def ext->os->os          i/ext->os->os)
 
@@ -56,9 +58,11 @@
 (def encode               i/encode)
 
 (def ->nil-os             i/->nil-os)
-(def ->countable          i/->countable)                    ; use with (count ...)
 (def ->digestible         i/->digestible)                   ; use with (close-and-digest ...)
 (def close-and-digest     i/close-and-digest)
+
+(def ->statsable          i/->statsable)                    ; use with (byte-count ...)
+(def byte-count           i/byte-count)
 
 ; TODO consider replacing the above with something like:
 ; (defmacro pull-all [ns]

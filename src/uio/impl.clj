@@ -5,7 +5,15 @@
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream]
            [java.net URI URLDecoder URLEncoder]
            [java.security Security]
-           [uio.fs Streams$CountableInputStream Streams$CountableOutputStream Streams$DigestibleInputStream Streams$DigestibleOutputStream Streams$NullOutputStream Streams$Finalizer Streams Streams$ConcatInputStream Streams$FinalizingInputStream]))
+           [uio.fs Streams$StatsableInputStream
+                   Streams$StatsableOutputStream
+                   Streams$DigestibleInputStream
+                   Streams$DigestibleOutputStream
+                   Streams$NullOutputStream
+                   Streams$Finalizer
+                   Streams$ConcatInputStream
+                   Streams$FinalizingInputStream
+                   Streams$Statsable]))
 
 (def default-delimiter "/")
 (def default-opts-from {:offset 0
@@ -13,15 +21,32 @@
 (def default-opts-ls   {:recurse false
                         :attrs   false})
 
+(def minimal-attrs [:url                                    ; always present
+                    :dir                                    ; present for dirs only and is always: `:dir true`
+                    :size                                   ; present only things that can be rear with `from` (e.g. files, but not dirs)
+                    :error])
+
+; neither of the extended attrs is guaranteed to be present
+(def extended-attrs [:perms                                 ; "rw-rw-rw-"
+                     :modified                              ; #inst"2018-02-09T22:04:53.000-00:00"
+                     :owner                                 ; "john"
+                     :group])                               ; "staff"
+
 ; Helper fns
 
 ; Examples:
 ; (die "MUHAHA!")
-; (die "Can't find keys" {:what "keys" :to "my car"})
-; (die "This url is misbehaving" {:url url} ioe)
-(defn die "A shortcut for (throw (ex-info ...))"
-  ([^String msg]       (throw (Exception. msg)))
-  ([^String msg cause] (throw (Exception. msg cause))))
+; (die (str "Couldn't connect to: " remote-ip) e)
+(defn die [msg & [cause ex-class]] (throw (Exception. msg cause)))
+
+; TODO use everywhere + document
+(defn die-file-not-found      [url & [cause]] (die (str "File not found: "             (pr-str url)) cause))
+(defn die-file-access-denied  [url & [cause]] (die (str "Access denied to: "           (pr-str url)) cause))
+(defn die-file-already-exists [url & [cause]] (die (str "File already exists: "        (pr-str url)) cause))
+(defn die-dir-not-empty       [url & [cause]] (die (str "Directory is not empty: "     (pr-str url)) cause))
+(defn die-dir-already-exists  [url & [cause]] (die (str "Directory already exists: "   (pr-str url)) cause))
+(defn die-parent-not-found    [url & [cause]] (die (str "Parent directory not found: " (pr-str url)) cause))
+(defn die-not-supported       [msg & [cause]] (throw (UnsupportedOperationException. msg cause)))
 
 ; Example:
 ; (let [file "/non-existent/path/to/file.txt"]
@@ -55,18 +80,34 @@
 (def pattern-url-no-auth-and-path #"^([a-zA-Z]?[a-zA-Z0-9+-]+)://(\?.*)?")
 
 (defn fix-url [url]
-  (cond (re-matches pattern-url-single-delimiter url)
-        (str/replace-first url ":/" ":///")
+  (let [url (str/replace url #"\+" "%20")]
+    (cond (re-matches pattern-url-single-delimiter url)
+          (str/replace-first url ":/" ":///")
 
-        (re-matches pattern-url-no-auth-and-path url)
-        (str/replace-first url "://" ":///")
+          (re-matches pattern-url-no-auth-and-path url)
+          (str/replace-first url "://" ":///")
 
-        :else url))
+          :else url)))
+
+(defn escape-url ^String [^String s]
+  (URLEncoder/encode s "UTF-8"))
+
+(defn escape-path ^String [^String s]
+  (str/replace (URLEncoder/encode s "UTF-8")
+               "%2F"
+               default-delimiter))
+
+(defn unescape-url ^String [^String s]
+  (when (str/includes? s " ")
+    (die (str "Can't unescape-url string containing space: " (pr-str s))))
+  (URLDecoder/decode s "UTF-8"))
 
 (defn ->URI          ^URI    [^String url] (rethrowing
                                              (str "Couldn't parse URL " (pr-str url))
-                                             (let [fixed-url      (fix-url url)
-                                                   normalized-uri (.normalize (URI. fixed-url))
+                                             (let [fixed-url          (fix-url url)
+                                                   normalized-uri     (.normalize (URI. fixed-url))
+                                                   _                  (when-not (.getScheme normalized-uri)
+                                                                        (die "Expected a scheme, e.g. fs://, but got none"))
                                                    normalized-uri-str (str normalized-uri)]
                                                (if (or (= "/" (.getSchemeSpecificPart normalized-uri))
                                                        (re-matches pattern-url-single-delimiter normalized-uri-str))
@@ -85,15 +126,15 @@
 (defn host          ^String  [^String url] (-> url ->URI .getHost))
 (defn port          ^Integer [^String url] (let [p (-> url ->URI .getPort)]
                                              (if (not= -1 p) p)))
-(defn path          ^String  [^String url] (let [p (.getPath (->URI url))]
+(defn path-raw      ^String  [^String url] (.getRawPath (->URI url)))
+(defn path          ^String  [^String url] (let [p (path-raw url)]
                                              (if (and (not (str/blank? p))
                                                       (not (re-matches pattern-url-no-auth-and-path url)))
-                                               p)))
-(defn filename      ^String  [^String url] (let [s (-> url path)]
-                                             (subs s (inc (str/last-index-of s default-delimiter)))))
-
-(defn escape-url    ^String  [^String s]   (.replace (URLEncoder/encode s "UTF-8") "+" "%20"))
-(defn unescape-url  ^String  [^String s]   (URLDecoder/decode s "UTF-8")) ; TODO replace %20/+?
+                                               (unescape-url p))))
+(defn filename      ^String  [^String url] (let [s (-> url path)
+                                                 f (subs s (inc (str/last-index-of s default-delimiter)))]
+                                             (if-not (str/blank? f)
+                                               f)))
 
 (defn query         ^String  [^String url] (.getRawQuery (->URI url)))
 (defn query-map              [^String url] (if-let [q (query url)]
@@ -118,7 +159,7 @@
 (defmulti delete  (fn [^String url & args] (scheme-k url)))    ; -> nil
 (defmulti ls      (fn [^String url & args] (scheme-k url)))    ; -> []
 (defmulti mkdir   (fn [^String url & args] (scheme-k url)))    ; -> nil
-(defmulti attrs   (fn [^String url & args] (scheme-k url)))    ; -> nil
+(defmulti attrs   (fn [^String url & args] (scheme-k url)))    ; ; -> {:url ..., ...}
 (defmulti copy    (fn [^String from-url ^String to-url & args] ; -> nil
                     (->URI from-url)                           ; ensure `from-url` is also parsable
                     (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parsable)
@@ -259,49 +300,73 @@
     (recur (.substring url 0 (- (count url) 1)))
     url))
 
+(defn with-parent [^String parent-url ^String file-unescaped]
+  (if (str/includes? file-unescaped default-delimiter)
+    (die (str "Expected argument \"file-unescaped\" to have no directory delimiters, but it had: " (pr-str file-unescaped))))
+  (str (ensure-ends-with-delimiter parent-url)
+       (escape-path file-unescaped)))
+
+(defn replace-path [^String url ^String absolute-path-or-blank]
+  (let [u (->URI url)]
+    (if (and (not (str/blank? absolute-path-or-blank))
+             (not (str/starts-with? absolute-path-or-blank default-delimiter)))
+      (die (str "Expected argument \"absolute-path-or-blank\" to start with a directory delimiter, but was: " (pr-str absolute-path-or-blank)))
+
+      (str (.getScheme u)
+           "://"
+           (.getRawAuthority u)
+           (escape-path (str absolute-path-or-blank))
+           (when (.getRawQuery u)
+             (str "?" (.getRawQuery u)))
+           (when (.getRawFragment u)
+             (str "#" (.getRawFragment u)))))))
+
 ; Example:
-; (get-parent-dir "/" "1/2/3.txt")
-; => "1/2/"
-(defn parent-of                                                ; -> [String] (does not end with a slash)
+; (parent-of "file:///path/to/file.txt") => "file:///path/to/"
+; (parent-of "file:///path/to/")         => "file:///path/"
+;
+(defn parent-of                                             ; -> [String] (does not end with a slash)
   ([^String url] (parent-of default-delimiter url))
   ([^String delimiter ^String url]
-   (when-let [i (str/last-index-of url delimiter)]
-     (subs url 0 (inc i)))))
+   (let [p (path url)]                                      ; ensure it's a URL + compact possible trailing slashes into one
+     (if (or (nil? p)                                       ; fs:// or fs:/// have no parent -- therefore nil
+             (= delimiter p))
+       nil
+       (replace-path url
+                     (let [p (if (str/ends-with? p delimiter)
+                               (subs p 0 (dec (count p)))
+                               p)
+                           i (str/last-index-of p delimiter)
+                           a (if i
+                               (subs p 0 (inc i))
+                               "")]
+                       a))))))
 
-(defn with-parent [^String parent-url ^String file]
-  (if (str/includes? file default-delimiter)
-    (die (str "Expected argument \"file\" to have no directory delimiters, but it had: " (pr-str file))))
-  (str (ensure-ends-with-delimiter parent-url) file))
-
-(defn replace-path [^String url ^String absolute-path]
-  (if-not (str/starts-with? absolute-path default-delimiter)
-    (die (str "Expected argument \"absolute-path\" to start with a directory delimiter, but was: " (pr-str absolute-path))))
-  (str (subs url
-             0
-             (- (count url)
-                (count (path url))))
-       absolute-path))
+(defn parents-between [parent-url child-url] ; => [{:url ... :dir true} ... ]
+  (->> (iterate parent-of child-url)
+       (drop 1)
+       (take-while #(and (some? %)
+                         (not (str/starts-with? parent-url %))))
+       (map #(array-map :url % :dir true))
+       (reverse)))
 
 ; See "test_uio.clj", (facts "intercalate-with-dirs works" ...)
-(defn intercalate-with-dirs
-  ([kvs]           (intercalate-with-dirs default-delimiter kvs))
-  ([delimiter kvs] (intercalate-with-dirs nil delimiter kvs))
-  ([delimiter last-flushed-dir [kv & kvs]]
-   (if-not kv
-     []
-     (let [parent-dir (parent-of (:url kv))
-           flush-dir? (and parent-dir
-                           (neg? (compare last-flushed-dir parent-dir)))
+(defn intercalate-with-dirs [viewed-from-url kvs]
+  kvs
+  (if (seq kvs)
+    (concat (parents-between viewed-from-url (:url (first kvs)))
+            [(first kvs)]
+            (->> (partition 2 1 kvs)
+                 (mapcat (fn [[a b]]
+                           (concat (parents-between (:url a) (:url b))
+                                   [b])))))))
 
-           tail       (lazy-seq
-                        (intercalate-with-dirs delimiter
-                                               (if flush-dir?
-                                                 parent-dir
-                                                 last-flushed-dir)
-                                               kvs))]
-       (cond->> (cons kv tail)
-                flush-dir? (cons {:url parent-dir
-                                  :dir true}))))))
+; used by all `ls` implementations
+(defmacro single-file-or [url & body]
+  `(let [a# (attrs ~url)]
+     (if (:size a#)
+       [a#]
+       ~@body)))
 
 ; codec-related fns
 ;
@@ -335,7 +400,7 @@
 ;      :exts        [:gz :bz2 :ufoz :xz],
 ;      :url         "file:///path/to/file.txt.xz.ufoz.bz2.gz"}, compiling:
 ;
-(defn url->ext+s->s
+(defn url->seq-of-ext+s->s
   [ext->s->s ^String url]
   (->> (str/split (path url) #"\.")
        (map keyword)
@@ -410,29 +475,29 @@
 ;
 ; Example:
 ; (with-open [is (counted-is (bytes->is (.getBytes "hello world")))]
-;   (println (count is))
+;   (println (byte-count is))
 ;   (.read is)
-;   (println (count is)))
+;   (println (byte-count is)))
 ; 0
 ; 1
 ; => nil
 ; (with-open [os (counted-os nil)]
-;   (println (count os))
+;   (println (byte-count os))
 ;   (.write os (.getBytes "hello world"))
-;   (println (count os)))
+;   (println (byte-count os)))
 ; 0
 ; 11
 ; => nil
 ;
 ; Example (advanced): measure compressed VS uncompressed ratio
-; (with-open [os-file (->countable (jio/output-stream (->nil-os)))
-;             os-gz   (->countable (ext-encode-os :gz os-file))
+; (with-open [os-file (->statsable (jio/output-stream (->nil-os)))
+;             os-gz   (->statsable (encode :gz os-file))
 ;             w       (jio/writer os-gz)]
 ;
 ;   ; ==> (.write {Writer                           --> w
-;   ;               {CountableOutputStream          --> os-gz
+;   ;               {StatsableOutputStream          --> os-gz
 ;   ;                 {GZIPOutputStream
-;   ;                   {CountableOutputStream      --> os-file
+;   ;                   {StatsableOutputStream      --> os-file
 ;   ;                     {NullOutputStream}}}}}
 ;
 ;   (doseq [i (range 10000)]
@@ -442,18 +507,21 @@
 ;   ; In this way we can get final counters, while still in `with-open` block.
 ;   (.close w)
 ;
-;   {:original   (count os-gz)
-;    :compressed (count os-file)})
+;   {:original   (byte-count os-gz)
+;    :compressed (byte-count os-file)})
 ;
 ;  => {:original 48890, :compressed 22196}
 ;
-(defn ->countable [^Closeable is-or-os]
-  (cond (instance? InputStream  is-or-os) (Streams$CountableInputStream.  is-or-os)
-        (instance? OutputStream is-or-os) (Streams$CountableOutputStream. is-or-os)
+(defn ->statsable [^Closeable is-or-os]
+  (cond (instance? InputStream  is-or-os) (Streams$StatsableInputStream. is-or-os)
+        (instance? OutputStream is-or-os) (Streams$StatsableOutputStream. is-or-os)
         :else                             (die (str "Expected InputStream or OutputStream, but got "
                                                     (if (nil? is-or-os)
                                                       "nil"
                                                       (.getName (type is-or-os)))))))
+
+(defn byte-count [^Streams$Statsable s]
+  (.getByteCount s))
 
 ; Adding digest calculation to existing input and output streams.
 ;
@@ -505,13 +573,13 @@
 (defn ^InputStream from* [^String url & args]
   (rethrowing (str "Couldn't apply is->is codecs to " url)
               (apply-codecs (apply from (cons url args))
-                            (url->ext+s->s ext->is->is url))))
+                            (url->seq-of-ext+s->s ext->is->is url))))
 
 ; TODO add examples
 (defn ^OutputStream to* [^String url & args]
-  (rethrowing (str "Couldn't apply os->os codecs to" url)
+  (rethrowing (str "Couldn't apply os->os codecs to " (pr-str url))
               (apply-codecs (apply to (cons url args))
-                            (url->ext+s->s ext->os->os url))))
+                            (url->seq-of-ext+s->s ext->os->os url))))
 
 (defn ^InputStream concat-with [url->is urls]
   (Streams$ConcatInputStream. url->is urls))
@@ -519,8 +587,8 @@
 ; Implementation: defaults
 (defn default-impl [^String url ^String method args]
   (if (scheme url)
-    (die (str "Method " (pr-str method) " is not implemented for " url))
-    (die (str "Expected a URL with a scheme, but got: \"" url "\". "
+    (die (str "Method " (pr-str method) " is not implemented for " (pr-str url)))
+    (die (str "Expected a URL with a scheme, but got: " (pr-str url) ". "
               "Available schemes are: "
               (->> method
                    symbol resolve deref methods keys
@@ -531,7 +599,6 @@
 
 (defmethod from    :default [url & args] (default-impl url "from"    args))
 (defmethod to      :default [url & args] (default-impl url "to"      args))
-(defmethod size    :default [url & args] (default-impl url "size"    args))
 (defmethod exists? :default [url & args] (default-impl url "exists?" args))
 (defmethod delete  :default [url & args] (default-impl url "delete"  args))
 (defmethod ls      :default [url & args] (default-impl url "ls"      args))
@@ -541,6 +608,10 @@
 (defmethod copy    :default [from-url to-url & args] (with-open [is (from from-url)
                                                                  os (to to-url)]
                                                        (jio/copy is os :buffer-size 8192)))
+
+(defmethod size    :default [url & args] (or (:size (attrs url))
+                                             (die-file-not-found url)))
+
 (defmethod ext->is->is :default [_] nil)
 (defmethod ext->os->os :default [_] nil)
 

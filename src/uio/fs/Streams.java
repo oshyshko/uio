@@ -1,6 +1,5 @@
 package uio.fs;
 
-import clojure.lang.Counted;
 import clojure.lang.IFn;
 
 import javax.xml.bind.DatatypeConverter;
@@ -10,7 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Streams {
     public static class NullOutputStream extends OutputStream {
@@ -27,10 +26,10 @@ public class Streams {
         }
     }
 
-    public static class CountableInputStream extends FilterInputStream implements Counted {
-        private final AtomicInteger count = new AtomicInteger();
+    public static class StatsableInputStream extends FilterInputStream implements Statsable {
+        private final AtomicLong count = new AtomicLong();
 
-        public CountableInputStream(InputStream in) {
+        public StatsableInputStream(InputStream in) {
             super(assertNotNull(in, "in"));
         }
 
@@ -48,19 +47,19 @@ public class Streams {
             return n;
         }
 
-        public int count() {
+        public long getByteCount() {
             return count.get();
         }
 
         public String toString() {
-            return "CountableInputStream{count=" + count() + ", in=" + in.getClass().getName() + "}";
+            return "StatsableInputStream{byteCount=" + getByteCount() + ", in=" + in.getClass().getName() + "}";
         }
     }
 
-    public static class CountableOutputStream extends FilterOutputStream implements Counted {
-        private final AtomicInteger count = new AtomicInteger();
+    public static class StatsableOutputStream extends FilterOutputStream implements Statsable {
+        private final AtomicLong count = new AtomicLong();
 
-        public CountableOutputStream(OutputStream out) {
+        public StatsableOutputStream(OutputStream out) {
             super(assertNotNull(out, "out"));
         }
 
@@ -74,12 +73,12 @@ public class Streams {
             count.addAndGet(len);
         }
 
-        public int count() {
+        public long getByteCount() {
             return count.get();
         }
 
         public String toString() {
-            return "CountableOutputStream{count=" + count() + ", out=" + out.getClass().getName() + "}";
+            return "StatsableOutputStream{bytes=" + getByteCount() + ", out=" + out.getClass().getName() + "}";
         }
     }
 
@@ -321,5 +320,9 @@ public class Streams {
         if (t == null)
             throw new NullPointerException("Argument `" + arg + "` can't be null");
         return t;
+    }
+    
+    public interface Statsable {
+        long getByteCount();
     }
 }
