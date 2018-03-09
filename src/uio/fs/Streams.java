@@ -78,7 +78,7 @@ public class Streams {
         }
 
         public String toString() {
-            return "StatsableOutputStream{bytes=" + getByteCount() + ", out=" + out.getClass().getName() + "}";
+            return "StatsableOutputStream{byteCount=" + getByteCount() + ", out=" + out.getClass().getName() + "}";
         }
     }
 

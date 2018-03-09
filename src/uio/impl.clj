@@ -159,7 +159,7 @@
 (defmulti delete  (fn [^String url & args] (scheme-k url)))    ; -> nil
 (defmulti ls      (fn [^String url & args] (scheme-k url)))    ; -> []
 (defmulti mkdir   (fn [^String url & args] (scheme-k url)))    ; -> nil
-(defmulti attrs   (fn [^String url & args] (scheme-k url)))    ; ; -> {:url ..., ...}
+(defmulti attrs   (fn [^String url & args] (scheme-k url)))    ; -> {:url ..., ...}
 (defmulti copy    (fn [^String from-url ^String to-url & args] ; -> nil
                     (->URI from-url)                           ; ensure `from-url` is also parsable
                     (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parsable)
