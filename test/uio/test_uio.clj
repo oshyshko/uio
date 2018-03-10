@@ -104,9 +104,10 @@
   (replace-path "fs://user@host:123/path/to/file.txt?a=b" "")    => "fs://user@host:123?a=b"
   (replace-path "fs://host/path/to/file.txt" "file.txt")         => (throws #"Expected argument")
   
-  (ensure-not-ends-with-delimiter "test")                        => "test"
-  (ensure-not-ends-with-delimiter "test/")                       => "test"
-  (ensure-not-ends-with-delimiter "test///")                     => "test")
+  (ensure-not-ends-with-delimiter "fs:///")                      => "fs:///"
+  (ensure-not-ends-with-delimiter "fs:///test/")                 => "fs:///test"
+  (ensure-not-ends-with-delimiter "fs:///test///")               => "fs:///test"
+  (ensure-not-ends-with-delimiter "fs:///test///")               => "fs:///test")
 
 (facts "longest-matching-prefix works"
   (let [prefixes ["fs://"
