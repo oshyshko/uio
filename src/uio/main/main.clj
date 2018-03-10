@@ -129,10 +129,10 @@
          "                              -s - print total file size, file and directory count"
          ""
          ""
-         (str "Version:" (get-version))
-         (str "FS:     " (str/join " " (map name (:fs (impl/list-available-implementations)))))
-         (str "Codecs: " (str/join " " (map name (:codecs (impl/list-available-implementations)))))
-         (str "Config: " (home-config-url))]))
+         (str "Version: " (get-version))
+         (str "FS:      " (str/join " " (map name (:fs (impl/list-available-implementations)))))
+         (str "Codecs:  " (str/join " " (map name (:codecs (impl/list-available-implementations)))))
+         (str "Config:  " (home-config-url))]))
 
 (defn copy [*print-status-fn
             ^Counted counted-is
