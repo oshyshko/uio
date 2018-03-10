@@ -12,14 +12,14 @@
   (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider]
            [com.amazonaws.internal StaticCredentialsProvider]
            [com.amazonaws.services.s3 AmazonS3Client]
-           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList]
+           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList GetObjectTaggingRequest]
            [uio.fs S3$S3OutputStream]))
-
-(defn path-no-slash [^String url]
-  (subs (path url) 1))
 
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter k))
+
+(defn path-no-slash [^String url]
+  (subs (path url) 1))
 
 (defn ^AWSCredentialsProvider ->creds-provider [url]
   (let [{:keys [access secret role-arn] :as creds-spec} (url->creds url)
@@ -28,9 +28,9 @@
       (STSAssumeRoleSessionCredentialsProvider. creds ^String role-arn "uio-s3-session")
       (StaticCredentialsProvider. creds))))
 
-(defn with-s3 [url client-bucket-key->x]
+(defn with-client-bucket-key [url c-b-k->x]
   (try-with #(AmazonS3Client. (->creds-provider url))
-            #(client-bucket-key->x % (host url) (path-no-slash url))
+            #(c-b-k->x % (host url) (path-no-slash url))
             #(.shutdown %)))
 
 ; See https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html?shortFooter=true#canned-acl
@@ -60,9 +60,9 @@
                                                #(S3$S3OutputStream. % (host url) (path-no-slash url) (some-> opts :acl acl->enum))
                                                #(.shutdown %)))
 
-(defmethod exists? :s3 [url & args] (with-s3 url (fn [c b k] (.doesObjectExist c b k))))
-(defmethod size    :s3 [url & args] (with-s3 url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
-(defmethod delete  :s3 [url & args] (with-s3 url (fn [c b k] (.deleteObject c b k))))
+(defmethod exists? :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.doesObjectExist c b k))))
+(defmethod size    :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
+(defmethod delete  :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.deleteObject c b k))))
 
 (defmethod mkdir   :s3 [url & args] (do :nothing nil))      ; S3 doesn't support directories
 
@@ -96,19 +96,45 @@
                        delimiter
                        (.getNextMarker l)))))))
 
-(defmethod ls      :s3 [url & args] (let [opts (get-opts default-opts-ls url args)
-                                          c    (AmazonS3Client. (->creds-provider url))
-                                          b    (host url)
-                                          k    (path-no-slash (ensure-ends-with-delimiter url))]
-                                      (cond->> (close-when-realized-or-finalized
-                                                 #(.shutdown c)
-                                                 (-ls c
-                                                      b
-                                                      k
-                                                      (ensure-ends-with-delimiter url)
-                                                      (:recurse opts)
-                                                      (:attrs opts)
-                                                      default-delimiter
-                                                      nil)) ; nil => list from beginning
+(defmethod attrs   :s3 [url & args] (with-client-bucket-key url
+                                                            (fn [c b k]
+                                                              (if-let [s (first (.getObjectSummaries (.listObjects c (ListObjectsRequest. b k nil nil nil))))]
+                                                                (cond
+                                                                  ; a file?
+                                                                  (= (path-no-slash url)
+                                                                     (.getKey s))
+                                                                  {:url url :size (.getSize s)}
 
-                                               (:recurse opts) (intercalate-with-dirs))))
+                                                                  ; a dir or sub-directory? (doesn't have files)
+                                                                  :else
+                                                                  (loop [url-asked (ensure-ends-with-delimiter url)
+                                                                         url-found (parent-of (replace-path url (str default-delimiter (.getKey s))))]
+                                                                    (cond (not (str/starts-with? url-found url-asked))
+                                                                          (die-file-not-found url)
+
+                                                                          (= url-asked url-found)
+                                                                          {:url url-asked :dir true}
+
+                                                                          :else
+                                                                          (recur url-asked (parent-of url-found)))))
+
+                                                                (die-file-not-found url)))))
+
+(defmethod ls      :s3 [url & args] (single-file-or
+                                      url
+                                      (let [opts (get-opts default-opts-ls url args)
+                                            c    (AmazonS3Client. (->creds-provider url))
+                                            b    (host url)
+                                            k    (path-no-slash (ensure-ends-with-delimiter url))]
+                                        (cond->> (close-when-realized-or-finalized
+                                                   #(.shutdown c)
+                                                   (-ls c
+                                                        b
+                                                        k
+                                                        (ensure-ends-with-delimiter url)
+                                                        (:recurse opts)
+                                                        (:attrs opts)
+                                                        default-delimiter
+                                                        nil)) ; nil => list from beginning
+
+                                                 (:recurse opts) (intercalate-with-dirs url)))))

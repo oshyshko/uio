@@ -78,7 +78,6 @@
                                                #(.close %)))
 
 (defmethod exists? :hdfs [url & args] (with-hdfs url #(.exists % (Path. (->URI url)))))
-(defmethod size    :hdfs [url & args] (with-hdfs url #(.getLen (.getFileStatus % (Path. (->URI url))))))
 (defmethod delete  :hdfs [url & args] (with-hdfs url #(do (and (not (.delete % (Path. (->URI url)) false))
                                                                (.exists % (Path. (->URI url)))
                                                                (die (str "Could not delete: got `false` and the file still exists: " url) ))
@@ -93,40 +92,50 @@
                                                               (die (str "A file with this name already exists: " url)))
                                                           nil)))
 
-(defn f->kv [attrs? ^FileStatus f]
-  (merge {:url (str (.toUri (.getPath f))
-                    (if (.isDirectory f)
-                      default-delimiter))}
+(defn fix-hdfs-url [url]
+  (str/replace url #"\+" "%2B"))
+
+(defn f->attrs [extended? ^FileStatus f]
+  (merge {:url ((if (.isDirectory f)
+                  ensure-ends-with-delimiter
+                  ensure-not-ends-with-delimiter)
+                 (fix-hdfs-url (str (.toUri (.getPath f)))))}
 
          (if (.isFile f)      {:size (.getLen f)})
          (if (.isDirectory f) {:dir  true})
 
-         (if attrs?
+         (if extended?
            (merge {:accessed (-> f .getAccessTime Date.)
                    :modified (-> f .getModificationTime Date.)
                    :owner    (-> f .getOwner)
                    :group    (-> f .getGroup)
                    :perms    (str (.getPermission f))}
 
-                  (if (.isSymlink f)   {:symlink     (-> f .getSymlink .toUri str)})
+                  (if (.isSymlink f)   {:symlink     (-> f .getSymlink .toUri str fix-hdfs-url)})
                   (if (.isEncrypted f) {:encrypted   true})
                   (if (.isFile f)      {:replication (-> f .getReplication)
                                         :block-size  (-> f .getBlockSize)})))))
 
-(defmethod ls      :hdfs [url & args] (let [opts (get-opts default-opts-ls url args)
-                                            fs   (FileSystem/newInstance (->config url))
-                                            p    (Path. (->URI url))]
-                                        (cond->> (->> (if (or (str/includes? url "?")
-                                                              (str/includes? url "*"))
-                                                        (.globStatus fs p)
-                                                        (->> (if (:recurse opts) ; RemoteIterator<LocatedFileStatus>
-                                                               (.listFiles fs p true)
-                                                               (.listStatusIterator fs p))
-                                                             (HdfsIterator. fs) ; Iterator<LocatedFileStatus>
-                                                             iterator-seq)) ; [FileStatus]
-                                                      (map (partial f->kv (:attrs opts))) ; [{kv}]
-                                                      (close-when-realized-or-finalized #(.close fs)))
+(defmethod attrs   :hdfs [url & [opts]]
+  ; TODO implement set
+  (with-hdfs url #(f->attrs true (.getFileStatus % (Path. (->URI url))))))
 
-                                                 (:recurse opts)
-                                                 (intercalate-with-dirs))))
+(defmethod ls      :hdfs [url & args] (single-file-or
+                                        url
+                                        (let [opts (get-opts default-opts-ls url args)
+                                              fs   (FileSystem/newInstance (->config url))
+                                              p    (Path. (->URI url))]
+                                          (cond->> (->> (if (or (str/includes? url "?")
+                                                                (str/includes? url "*"))
+                                                          (.globStatus fs p)
+                                                          (->> (if (:recurse opts) ; RemoteIterator<LocatedFileStatus>
+                                                                 (.listFiles fs p true)
+                                                                 (.listStatusIterator fs p))
+                                                               (HdfsIterator. fs) ; Iterator<LocatedFileStatus>
+                                                               iterator-seq)) ; [FileStatus]
+                                                        (map (partial f->attrs (:attrs opts))) ; [{kv}]
+                                                        (close-when-realized-or-finalized #(.close fs)))
 
+                                                   (:recurse opts)
+                                                   (intercalate-with-dirs url)))))
+ 

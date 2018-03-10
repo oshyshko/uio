@@ -17,7 +17,7 @@
   (:require [clojure.string :as str]
             [uio.fs.file :as file]
             [uio.impl :refer :all])
-  (:import [com.jcraft.jsch JSch Channel ChannelSftp ChannelSftp$LsEntry Session SftpException]
+  (:import [com.jcraft.jsch JSch ChannelSftp Session SftpException SftpATTRS Channel]
            [java.io ByteArrayInputStream]
            [java.util.zip GZIPOutputStream GZIPInputStream]
            [java.util Date]))
@@ -42,7 +42,7 @@
            footer)
       (die "Got a private key without line separators, tried to reformat it, but failed to match the pattern"))))
 
-(defn ->session+channel [url]
+(defn ->session+channel [url]                               ; -> [Session ChannelSftp]
   (let [{:keys [user
                 known-hosts
                 pass
@@ -71,9 +71,9 @@
                 (.connect default-timeout-ms))]
     [s c]))
 
-(defn with-channel [url c->x]
+(defn with-session-channel [url session-channel->x]
   (try-with #(->session+channel url)
-            (fn [[_ c]] (c->x c))
+            (fn [[s c]] (session-channel->x s c))
             (fn [[s c]] (.disconnect c)
                         (.disconnect s))))
 
@@ -89,13 +89,12 @@
                                                #(try
                                                   ; workaround to Jsch concurrency bug
                                                   ; store in a local gzipped file before sending over SFTP
-                                                  (with-channel url (fn [c]
-                                                                      (.put c
-                                                                            (GZIPInputStream. (from %))
-                                                                            (path url))))
+                                                  (with-session-channel url
+                                                                        (fn [_ c]
+                                                                          (.put c
+                                                                                (GZIPInputStream. (from %))
+                                                                                (path url))))
                                                   (finally (delete %)))))
-
-(defmethod size    :sftp [url & args] (with-channel url #(.getSize (.stat % (path url)))))
 
 (defmethod exists? :sftp [url & args] (try (size url)
                                            true
@@ -104,51 +103,55 @@
                                                false
                                                (die (str "Couldn't determine file existence " url) e)))))
 
-(defmethod delete  :sftp [url & args] (with-channel url #(rethrowing (str "Could not delete " url)
-                                                                     (if (.isDir (.stat % (path url)))
-                                                                       (.rmdir % (path url))
-                                                                       (.rm % (path url))))))
+(defmethod delete  :sftp [url & args] (with-session-channel url
+                                                            (fn [_ c]
+                                                              (rethrowing (str "Could not delete " url)
+                                                                          (if (.isDir (.stat c (path url)))
+                                                                            (.rmdir c (path url))
+                                                                            (.rm c (path url)))))))
 
-(defmethod mkdir   :sftp [url & args]      (with-channel url #(rethrowing (str "Could not create directory at " url)
-                                                                          (.mkdir % (path url)))))
+(defmethod mkdir   :sftp [url & args]      (with-session-channel url
+                                                                 (fn [_ c]
+                                                                   (rethrowing (str "Could not create directory at " url)
+                                                                               (.mkdir c (path url))))))
 
 (defmethod copy    :sftp [from-url to-url & args] (try-with #(->session+channel to-url)
-                                                            (fn [[_ c]] (with-open [is (from from-url)]
-                                                                          (.put c is (path to-url))))
-                                                            (fn [[s c]] (.disconnect c)
+                                                            (fn [[_ c]]
+                                                              (with-open [is (from from-url)]
+                                                                (.put c is (path to-url))))
+                                                            (fn [[s c]]
+                                                              (.disconnect c)
                                                               (.disconnect s))))
 
-(defn f->kv [c uid->name gid->name file-url attrs? ^ChannelSftp$LsEntry f]
-  (let [a      (.getAttrs f)
-        is-dir (.isDir a)]
-    (merge {:url (str file-url (if is-dir default-delimiter))}
-           (if is-dir
-             {:dir true}
-             {:size (.getSize (.getAttrs f))})
+(defn f->attrs [^Channel c uid->name gid->name file-url extended? ^SftpATTRS a]
+  (merge {:url (str file-url (if (.isDir a) default-delimiter))}
+         (if (.isDir a)
+           {:dir true}
+           {:size (.getSize a)})
 
-           (if attrs?
-             (merge {:accessed (-> a .getATime (* 1000) Date.)
-                     :modified (-> a .getMTime (* 1000) Date.)
-                     :owner    (or (uid->name (.getUId a)) (.getUId a))
-                     :group    (or (gid->name (.getGId a)) (.getGId a))
-                     :perms    (-> a .getPermissionsString (subs 1))}
+         (if extended?
+           (merge {:accessed (-> a .getATime (* 1000) Date.)
+                   :modified (-> a .getMTime (* 1000) Date.)
+                   :owner    (or (uid->name (.getUId a)) (.getUId a))
+                   :group    (or (gid->name (.getGId a)) (.getGId a))
+                   :perms    (-> a .getPermissionsString (subs 1))}
 
-                    (if (.isLink a)
-                      {:symlink (->> (.readlink c (path file-url))
-                                     (str (parent-of file-url))
-                                     normalize)}))))))
+                  (if (.isLink a)
+                    {:symlink (->> (.readlink c (path file-url))
+                                   (str (parent-of file-url))
+                                   normalize)})))))
 
-(defn -ls [c uid->name gid->name url recurse? attrs?]
+(defn -ls [c uid->name gid->name url recurse? extended?]
   (try (->> (concat (.ls c (str (path url) "/*"))
                     (.ls c (str (path url) "/.*")))
             (sort-by #(.getFilename %))
-            (mapcat #(let [f        (.getFilename %)
-                           file-url (with-parent url (escape-url f))]
+            (mapcat #(let [f        (.getFilename %)        ; % :: ChannelSftp$LsEntry
+                           file-url (with-parent url f)]
                        (if-not (#{"." ".."} f)              ; skip "." and ".." dirs
-                           (cons (f->kv c uid->name gid->name file-url attrs? %)
+                           (cons (f->attrs c uid->name gid->name file-url extended? (.getAttrs %))
                                  (if (and recurse?
                                           (.isDir (.getAttrs %))) ; if isDir=true then isLink=false
-                                   (lazy-seq (-ls c uid->name gid->name file-url recurse? attrs?))
+                                   (lazy-seq (-ls c uid->name gid->name file-url recurse? extended?))
                                  nil))
                          nil))))
     (catch Exception e [{:url url :error e}])))
@@ -170,25 +173,36 @@
       (slurp (.getInputStream c))
       (finally (.disconnect c)))))
 
-(defmethod ls :sftp [url & args] (let [opts     (get-opts default-opts-ls url args)
-                                       [s c]    (->session+channel url)
-                                       close-cs #(do (.disconnect c)
-                                                     (.disconnect s))
+(defn ->uid->name [^Session s]
+  (try (passwd->id->name (exec->s s "getent passwd"))
+       (catch Exception _ {})))
 
-                                       [uid->name gid->name]
-                                       (map #(if (:attrs opts)
-                                               (try (passwd->id->name (exec->s s %))
-                                                    (catch Exception _ {}))
-                                               {})
-                                            ["getent passwd"
-                                             "getent group"])]
-                                   (try
-                                     (close-when-realized-or-finalized
-                                       close-cs
-                                       (-ls c
-                                            uid->name
-                                            gid->name
-                                            (ensure-not-ends-with-delimiter (normalize url))
-                                            (:recurse opts)
-                                            (:attrs opts)))
-                                     (catch Exception _ (close-cs)))))
+(defn ->gid->name [^Session s]
+  (try (passwd->id->name (exec->s s "getent group"))
+       (catch Exception _ {})))
+
+(defmethod attrs :sftp [url & args] (with-session-channel url
+                                                          (fn [s c]
+                                                            (f->attrs c
+                                                                      (->uid->name s)
+                                                                      (->gid->name s)
+                                                                      url
+                                                                      true
+                                                                      (.stat c (path url))))))
+
+(defmethod ls :sftp [url & args] (single-file-or
+                                   url
+                                   (let [opts     (get-opts default-opts-ls url args)
+                                         [s c] (->session+channel url)
+                                         close-cs #(do (.disconnect c)
+                                                       (.disconnect s))]
+                                     (try
+                                       (close-when-realized-or-finalized
+                                         close-cs
+                                         (-ls c
+                                              (if (:attrs opts) (->uid->name s) {})
+                                              (if (:attrs opts) (->gid->name s) {})
+                                              (ensure-not-ends-with-delimiter (normalize url))
+                                              (:recurse opts)
+                                              (:attrs opts)))
+                                       (catch Exception _ (close-cs))))))
