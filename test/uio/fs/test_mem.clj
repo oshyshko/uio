@@ -6,22 +6,48 @@
 (facts "Mem works"
   (mem/reset)
 
-  (spit (to "mem:///123/456.txt")       "a")
-  (spit (to "mem:///123/456/aa.txt")    "bb")
-  (spit (to "mem:///123/456/aa/bb.txt") "ccc")
-  (spit (to "mem:///123/456/cc.txt")    "dddd")
+  (exists? "mem:///123")      => false
+  (exists? "mem:///123/")     => false
 
+  (mkdir "mem:///123")        => nil
+
+  (exists? "mem:///123")      => true
+  (exists? "mem:///123/")     => true
+  
+  (mkdir "mem:///123/456")    => nil
+  (mkdir "mem:///123/456/aa") => nil
+
+  (attrs "mem:///")           => {:url "mem:///"     :dir true}
+  (attrs "mem:///123")        => {:url "mem:///123/" :dir true}
+  (attrs "mem:///123/")       => {:url "mem:///123/" :dir true}
+
+  ; put some files
+  (spit (to "mem:///123/456.txt")       "a")    => nil
+  (spit (to "mem:///123/456/aa.txt")    "bb")   => nil
+  (spit (to "mem:///123/456/aa/bb.txt") "ccc")  => nil
+  (spit (to "mem:///123/456/cc.txt")    "dddd") => nil
+
+  (ls "mem:///123/456.txt")   => [{:url "mem:///123/456.txt" :size 1}]
+  (ls "mem:///123/456.txt/")  => (throws #"There's something, but it's not a directory: \"mem:///123/456.txt\"")
+
+  ; try creating directories over existing dir/files and reading/writing files to a directory
+  (mkdir "mem:///123")            => (throws #"Directory already exists")
+  (attrs "mem:///doesn't/exist")  => (throws #"File not found")
+  (mkdir "mem:///123/456.txt")    => (throws #"File already exists")
+  (from  "mem:///123/")           => (throws #"Directory already exists")
+  (spit (to "mem:///123/") "123") => (throws #"Directory already exists")
+
+  ; ls
   (ls "mem:///")        => [{:url "mem:///123/"              :dir  true}]
 
   (ls "mem:///123")     => (ls "mem:///123/")
   (ls "mem:///123")     => [{:url "mem:///123/456.txt"       :size 1}
                             {:url "mem:///123/456/"          :dir  true}]
-
-
+  
   (ls "mem:///123/456") => [{:url "mem:///123/456/aa.txt"    :size 2}
                             {:url "mem:///123/456/aa/"       :dir  true}
                             {:url "mem:///123/456/cc.txt"    :size 4}]
-
+  
   (ls "mem:///"
       {:recurse true})  => [{:url "mem:///123/"              :dir  true}
                             {:url "mem:///123/456.txt"       :size 1}
@@ -31,10 +57,13 @@
                             {:url "mem:///123/456/aa/bb.txt" :size 3}
                             {:url "mem:///123/456/cc.txt"    :size 4}]
 
+  ; check that files are returned in ascending order
   (mem/reset)
 
-  ; check that files are returned in ascending order
+  (mkdir "mem:///file-2")
+
   (spit (to (str "mem:///file-3.txt"))   "hello")
+  (spit (to (str "mem:///file-2.txt"))   "hello")
   (spit (to (str "mem:///file-2/2.txt")) "hello")
   (spit (to (str "mem:///file-1.txt"))   "hello")
 
@@ -49,4 +78,3 @@
                            sort)
 
   (mem/reset))
-
