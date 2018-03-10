@@ -13,15 +13,15 @@ Features:
 
 ## Built-in protocols
 
-|                  |from | to  |size |exists?|delete|mkdir| ls  | URL format                             |
-|------------------|:---:|:---:|:---:|:-----:|:----:|:---:|:---:|----------------------------------------|
-|[file](#file)     |  •  |  •  |  •  |   •   |  •   |  •  |  •  |`file:///path/to/file.txt`              |
-|[hdfs](#hdfs)     |  •  |  •  |  •  |   •   |  •   |  •  |  •  |`hdfs://[host]/path/to/file.txt`        |
-|[http(s)](#https) |  •  |     |:cat:| :cat: |      |     |     |`http[s]://host[:port]/path/to/file.txt`|
-|[mem](#mem)       |  •  |  •  |  •  |   •   |  •   |:dog:|  •  |`mem:///path/to/file.txt`               |
-|[res](#res)       |  •  |     |     |       |      |     |     |`res:///com/mypackage/file.txt`         |
-|[s3](#s3)         |  •  |  •  |  •  |   •   |  •   |:dog:|  •  |`s3://bucket/key/with/slashes.txt`      |
-|[sftp](#sftp)     |  •  |:bug:|  •  |   •   |:pig: |  •  |  •  |`sftp://host[:port]/path/to/file.txt`   |
+|                  |from | to  |size |exists?|delete|mkdir| ls  |attrs| URL format                             |
+|------------------|:---:|:---:|:---:|:-----:|:----:|:---:|:---:|:---:|----------------------------------------|
+|[file](#file)     |  •  |  •  |  •  |   •   |  •   |  •  |  •  |  •  |`file:///path/to/file.txt`              |
+|[hdfs](#hdfs)     |  •  |  •  |  •  |   •   |  •   |  •  |  •  |  •  |`hdfs://[host]/path/to/file.txt`        |
+|[http(s)](#https) |  •  |     |:cat:| :cat: |      |     |     |     |`http[s]://host[:port]/path/to/file.txt`|
+|[mem](#mem)       |  •  |  •  |  •  |   •   |  •   |  •  |  •  |  •  |`mem:///path/to/file.txt`               |
+|[res](#res)       |  •  |     |     |       |      |     |     |     |`res:///com/mypackage/file.txt`         |
+|[s3](#s3)         |  •  |  •  |  •  |   •   |  •   |:dog:|  •  |  •  |`s3://bucket/key/with/slashes.txt`      |
+|[sftp](#sftp)     |  •  |:bug:|  •  |   •   |:pig: |  •  |  •  |  •  |`sftp://host[:port]/path/to/file.txt`   |
 
 - :cat: - limited support, see [HTTP(S)](#https)
 - :dog: - these FS don't have directories: `ls` will emulate directories, `mkdir` will do nothing
@@ -111,6 +111,34 @@ Built-in codecs: `.bz2`, `.gz`, `.xz`.
      (reduce +))                                            ; get total size (in bytes)
 ; => 12345678
 
+; Getting attributes for a single file
+(uio/attrs "file:///")
+; => {:url      "file:///"
+;     :dir      true
+;     :modified #inst"2018-01-30T23:27:56.000-00:00"
+;     :owner    "root"
+;     :group    "wheel"
+;     :perms    "rwxr-xr-x"}
+
+; Listing with extra attributes
+(ls "file:///" {:attrs true})
+; => ({:url      "file:///Applications"
+;      :dir      true
+;      :modified #inst"2018-03-05T21:48:27.000-00:00"
+;      :owner    "root"
+;      :group    "admin"
+;      :perms    "rwxrwxr-x"}
+;     {:url      "file:///Library"
+;      :dir      true
+;      :modified #inst"2017-11-07T21:54:12.000-00:00"
+;      :owner    "root"
+;      :group    "wheel"
+;      :perms    "rwxr-xr-x"}
+;     ...)
+
+; NOTE: by default, `ls` returns the minimum required set of attributes: :url, :size/:dir, :error.
+; NOTE: extra attributes depend on actual FS and may not be present in other FS.
+
 ; Copying a large file from one URL to another:
 (uio/copy "hdfs:///path/to/file.txt"
           "s3://bucket/key/with/slashes.txt")
@@ -122,7 +150,7 @@ Built-in codecs: `.bz2`, `.gz`, `.xz`.
            "s3://bucket-a/"         {:access ...            ; credentials for bucket `bucket-a`
                                      :secret ...}
 
-           "hdfs://"                {}                      ; default credentials for HDFS -- use `kinit` (empty {})
+           "hdfs://"                {}                      ; default credentials for HDFS => use `kinit`
 
            "hdfs://site-a"          {:principal "guest"     ; use `guest` account to access `site-a`
                                      :keytab    "file:///path/to/guest.keytab"}
@@ -137,20 +165,20 @@ Built-in codecs: `.bz2`, `.gz`, `.xz`.
 See [Implementation-specific details](#implementation-specific-details) for the full list of configuration keys
 and corresponding environment variables.
 
-### Adding your protocol
+### Adding your FS
 ```clojure
 (ns myns
   (:require [uio.uio :refer [from to size delete mkdir ls
                              with from* to* copy]))
 
 ; Implement the following methods in your namespace:
-(defmethod from    :myftp [url]        :TODO) ; should return an InputStream
-(defmethod to      :myftp [url]        :TODO) ; should return an OutputStream
-(defmethod size    :myftp [url]        :TODO) ; should return a Number
-(defmethod exists? :myftp [url]        :TODO) ; should return a boolean
-(defmethod delete  :myftp [url]        :TODO) ; should return nil
-(defmethod mkdir   :myftp [url]        :TODO) ; should return nil
-(defmethod ls      :myftp [url & opts] :TODO) ; should return a list of maps
+(defmethod from    :myftp [url & args] :TODO) ; should return an InputStream
+(defmethod to      :myftp [url & args] :TODO) ; should return an OutputStream
+(defmethod size    :myftp [url & args] :TODO) ; should return a Number
+(defmethod exists? :myftp [url & args] :TODO) ; should return a boolean
+(defmethod delete  :myftp [url & args] :TODO) ; should return nil
+(defmethod mkdir   :myftp [url & args] :TODO) ; should return nil
+(defmethod ls      :myftp [url & args] :TODO) ; should return a list of maps
 
 ; Use your implementation
 (exists? "myftp://host/path/to/file.txt")
@@ -160,7 +188,7 @@ and corresponding environment variables.
 ;       For an example, see implementation of `copy` for S3.
 ```
 
-### Adding your extension codec
+### Adding your codec
 ```clojure
 (ns example
   (:require [uio.uio :refer [ext->is->is ext->os->os])
@@ -179,7 +207,7 @@ and corresponding environment variables.
 (spit (to* "file:///path/to/file.txt.myzip.bz2") "<content>")       ; => nil
 ```
 
-## Implementation-specific details
+## FS-specific details
 
 ### File
 Your local file system, e.g. `file:///home/user`.
@@ -190,9 +218,9 @@ Your local file system, e.g. `file:///home/user`.
                       :keytab    "file:///path/to/eytab"}}
   ...)
 
-; NOTE: to use Kerberos (`kinit`) authentication, leave empty value for `{"hdfs://" {}}`.
+; NOTE: to use Kerberos (`kinit`) authentication, set to empty map: "hdfs://" {}.
 
-; NOTE: to disable implementation of HDFS and remove all depended JARs, add this exclusion to your `project.clj`:
+; NOTE: to disable HDFS and remove all dependencies, add this exclusion to your `project.clj`:
 :dependencies [[uio/uio "1.1" :exclusions [org.apache.hadoop/hadoop-common
                                            org.apache.hadoop/hadoop-hdfs]]]
 ```
@@ -230,7 +258,7 @@ Your local file system, e.g. `file:///home/user`.
 
 ### Mem
 ```clojure
-; An in-memory filesystem. Useful for unit testing.
+; In-memory filesystem. Useful for unit testing.
 
 (ns myns
   (:require [uio.uio :as uio]
@@ -238,13 +266,16 @@ Your local file system, e.g. `file:///home/user`.
 
 (mem/reset)                                                  ; deletes all files from memory
 
+(mkdir "mem:///path")
+(mkdir "mem:///path/to")
+
 (spit  (uio/to*   "mem:///path/to/file.txt.gz") "<content>") ; => nil
 (slurp (uio/from* "mem:///path/to/file.txt.gz"))             ; => "<content>"
 ```
 
 ### Res
 ```clojure
-; Provides access to files in classpath. Only `from` is implemented.
+; Provides access to resources in classpath. Only `from` is implemented.
 
 (slurp (uio/from "res:///uio/uio.clj"))                      ; ...source code of uio.clj as a String
 
@@ -273,7 +304,7 @@ InputStream is = clojure.java.api.Clojure.class.getResourceAsStream("/uio/uio.cl
   ...)
 
 ; NOTE: to get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa -p <port> <host>`
-;      and copy the content (skip the line starting with a #).
+;       and copy the content (skip the line starting with a #).
 
 ; NOTE: either :pass or :identity should be present.
 ```
