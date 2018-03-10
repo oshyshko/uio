@@ -5,6 +5,7 @@
 - proper escaping of ` `, `+` and `%` in `file://`, `hdfs://`, `s3://` and `sftp://`
 
 ### Added
+- `uio` command prints statistics on SIGINFO (press Ctr+T in Terminal, OS X only)
 - `uio/attrs` that works on files and directories
 ```
 (uio/attrs "file:///")
@@ -27,7 +28,6 @@
      :perms    "rwxrwxr-x"}
     ...)
 ```
-- `uio` command prints statistics on SIGINFO (press Ctr+T in Unix terminal)
 
 ### Modified
 - `uio/ls` returns a vector with one entry when pointed to a file (was empty vector before) <- plays well with `uio/concat-with`
