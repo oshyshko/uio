@@ -3,10 +3,12 @@
             [uio.impl :refer [die] :as impl]
             [clojure.string :as str]
             [clojure.java.io :as jio]
-            [clojure.tools.cli :refer [parse-opts]])
+            [clojure.tools.cli :as cli])
   (:import [org.apache.log4j Level Logger ConsoleAppender PatternLayout]
            [java.text SimpleDateFormat]
-           [java.util TimeZone])
+           [java.util TimeZone]
+           [clojure.lang Counted]
+           [java.io InputStream OutputStream])
   (:gen-class))
 
 (defn err [& msg]
@@ -99,39 +101,55 @@
 (def help-hint "To see examples, run `uio --help`.")
 
 (defn print-usage []
-  (println "Usage: cat file.txt | uio to       fs:///path/to/file.txt")
-  (println "       cat file.txt | uio to*      fs:///path/to/file.txt.gz")
-  (println)
-  (println "                      uio from     fs:///path/to/file.txt    > file.txt")
-  (println "                      uio from*    fs:///path/to/file.txt.gz > file.txt")
-  (println)
-  (println "                      uio size     fs:///path/to/file.txt")
-  (println "                      uio exists?  fs:///path/to/file.txt")
-  (println "                      uio delete   fs:///path/to/file.txt")
-  (println "                      uio mkdir    fs:///path/to/dir/")
-  (println)
-  (println "                      uio copy     fs:///source/path/to/file.txt fs:///destination/path/to/file.txt")
-  (println)
-  (println "                      uio ls [-lh] fs:///path/to/dir/")
-  (println "                              -l - list in long format (show attributes)")
-  (println "                              -h - print sizes in human readable format")
-  (println)
-  (println "                      uio --help - print this help")
-  (println)
-  (println "Common flags:                 -v - print stack traces and annoying logs to stderr")
-  (println)
-  (println "Experimental (will change in future!):")
-  (println "                      uio ls [-rs] fs:///path/to/dir/")
-  (println "                              -r - list files and directories recursively")
-  (println "                              -s - print total file size, file and directory count")
-  (println)
-  (println)
-  (println "Version:" (get-version))
-  (println "FS:     " (str/join " " (map name (:fs     (impl/list-available-implementations)))))
-  (println "Codecs: " (str/join " " (map name (:codecs (impl/list-available-implementations)))))
-  (println "Config: " (home-config-url)))
+  (run! println
+        ["Usage: cat file.txt | uio to       fs:///path/to/file.txt"
+         "       cat file.txt | uio to*      fs:///path/to/file.txt.gz"
+         ""
+         "                      uio from     fs:///path/to/file.txt    > file.txt"
+         "                      uio from*    fs:///path/to/file.txt.gz > file.txt"
+         ""
+         "                      uio size     fs:///path/to/file.txt"
+         "                      uio exists?  fs:///path/to/file.txt"
+         "                      uio delete   fs:///path/to/file.txt"
+         "                      uio mkdir    fs:///path/to/dir/"
+         ""
+         "                      uio copy     fs:///source/path/to/file.txt fs:///destination/path/to/file.txt"
+         ""
+         "                      uio ls [-lh] fs:///path/to/dir/"
+         "                              -l - list in long format (show attributes)"
+         "                              -h - print sizes in human readable format"
+         ""
+         "                      uio --help - print this help"
+         ""
+         "Common flags:                 -v - print stack traces and annoying logs to stderr"
+         ""
+         "Experimental (will change in future!):"
+         "                      uio ls [-rs] fs:///path/to/dir/"
+         "                              -r - list files and directories recursively"
+         "                              -s - print total file size, file and directory count"
+         ""
+         ""
+         (str "Version:" (get-version))
+         (str "FS:     " (str/join " " (map name (:fs (impl/list-available-implementations)))))
+         (str "Codecs: " (str/join " " (map name (:codecs (impl/list-available-implementations)))))
+         (str "Config: " (home-config-url))]))
 
-(defn run [[op a b :as args]
+(defn copy [*print-status-fn
+            ^Counted counted-is
+            ^Counted counted-os
+            ^InputStream source-is
+            ^OutputStream target-os]
+  (let [started-ms (System/currentTimeMillis)]
+    (reset! *print-status-fn
+            #(-> (merge (when counted-is {:read-bytes (uio/byte-count counted-is)})
+                        (when counted-os {:written-bytes (uio/byte-count counted-os)})
+                        {:spent-ms (- (System/currentTimeMillis)
+                                      started-ms)})))
+    (jio/copy source-is target-os :buffer-size 32768)
+    (reset! *print-status-fn nil)))
+
+(defn run [*print-status-fn
+           [op a b :as args]
            {:keys [recurse
                    attrs
                    human-readable] :as opts}]
@@ -142,11 +160,24 @@
   (case (op-or-alias->op op)
     "help"    (print-usage)
 
-    "from"    (with-open [is (uio/from  a)] (jio/copy is System/out :buffer-size 8192))
-    "from*"   (with-open [is (uio/from* a)] (jio/copy is System/out :buffer-size 8192))
+    ; TODO report read/written from source is/os, not the wrapped/unwrapped one
+    "from"    (with-open [is (uio/->statsable (uio/from a))
+                          os (uio/->statsable System/out)]
+                (copy *print-status-fn is os is os))
 
-    "to"      (with-open [os (uio/to    a)] (jio/copy System/in os  :buffer-size 8192))
-    "to*"     (with-open [os (uio/to*   a)] (jio/copy System/in os  :buffer-size 8192))
+    "from*"   (with-open [is  (uio/->statsable (uio/from a))
+                          is* (impl/apply-codecs is (impl/url->seq-of-ext+s->s impl/ext->is->is a))
+                          os  (uio/->statsable System/out)]
+                (copy *print-status-fn is os is* os))
+
+    "to"      (with-open [is (uio/->statsable System/in)
+                          os (uio/->statsable (uio/to a))]
+                (copy *print-status-fn is os is os))
+
+    "to*"     (with-open [is  (uio/->statsable System/in)
+                          os  (uio/->statsable (uio/to a))
+                          os* (impl/apply-codecs os (impl/url->seq-of-ext+s->s impl/ext->os->os a))]
+                (copy *print-status-fn is os is os*))
 
     "size"    (println (uio/size a))
     "exists?" (if-not (uio/exists? a) (die exit-1))
@@ -163,19 +194,19 @@
                      (fn [stats f]
                        (let [url (cond-> (:url f)
                                          (:symlink f) (str " -> " (:symlink f))
-                                         (:error f)   (str " -- " (:error f)))]
+                                         (:error f) (str " -- " (:error f)))]
 
                          (println (if attrs
                                     (format (if human-readable
                                               "%9s %-10s %-10s %16s %6s %s"
-                                              "%9s %-10s %-10s %16s %11s %s")
+                                              "%9s %-10s %-10s %16s %12s %s")
                                             (or (:perms f) "")
                                             (or (:owner f) "")
                                             (or (:group f) "")
                                             (or (some->> (:modified f)
                                                          (.format ymd-hm-utc))
                                                 "")
-                                            (or (and (:size f) ; TODO refactor
+                                            (or (and (:size f)   ; TODO refactor
                                                      (cond-> (:size f)
                                                              human-readable (size->human-size)))
                                                 "")
@@ -183,7 +214,7 @@
                                     url))
 
                          (cond-> stats
-                                 (:dir f)  (update :dirs + 1)
+                                 (:dir f) (update :dirs + 1)
                                  (:size f) (-> (update :files + 1)
                                                (update :size + (:size f))))))
 
@@ -194,14 +225,16 @@
                                        (size->human-size (:size %))
                                        (str (:size %) " byte" (s-if-plural (:size %))))
                                      ", " (:files %) " file" (s-if-plural (:files %))
-                                     ", " (:dirs %)  " dir"  (s-if-plural (:dirs %)))))))
+                                     ", " (:dirs %) " dir" (s-if-plural (:dirs %)))))))
 
-    "copy"    (uio/copy a b) ; TODO check url-b
+    "copy"    (with-open [is (uio/->statsable (uio/from a))    ; TODO check url-b
+                          os (uio/->statsable (uio/to b))]
+                (copy *print-status-fn is os is os))
 
     "_export" (->> impl/*config*
                    (map (fn [[url m]]
                           (str url
-                               (if (seq m)
+                               (when (seq m)
                                  (str "?"
                                       (str/join "&"
                                                 (for [[k v] m]
@@ -226,16 +259,30 @@
 ; TODO fix S3: s3cmd ls s3://geopulse-ingest/teamcity/build_383/00/
 ;
 (defn -main [& args]
-  (let [cli (parse-opts args
-                        [["-r" "--recurse"        "Make `ls` recursive"                                     :default false]
-                         ["-l" "--attrs"          "Make `ls` list in long format (show attributes)"         :default false]
-                         ["-s" "--summarize"      "Make `ls` print total file size, file and dir count"     :default false]
-                         ["-h" "--human-readable" "Print sizes in human readable format (e.g., 1K 234M 2G)" :default false]
-                         ["-v" "--verbose"        "Print stack traces"                                      :default false]
-                         [nil  "--help"           "Show help"                                               :default false]])]
+  (let [*get-status-fn (atom nil)
+        cli            (cli/parse-opts args
+                                       [["-r" "--recurse"        "Make `ls` recursive"                                     :default false]
+                                        ["-l" "--attrs"          "Make `ls` list in long format (show attributes)"         :default false]
+                                        ["-s" "--summarize"      "Make `ls` print total file size, file and dir count"     :default false]
+                                        ["-h" "--human-readable" "Print sizes in human readable format (e.g., 1K 234M 2G)" :default false]
+                                        ["-v" "--verbose"        "Print stack traces"                                      :default false]
+                                        [nil "--help"            "Print help"                                              :default false]])]
 
+    ; trap Ctrl+T -- print status (for long-running tasks like `copy`)
+    (try
+      (sun.misc.Signal/handle
+        (sun.misc.Signal. "INFO")
+        (reify sun.misc.SignalHandler
+          (handle [_ s] (errln (if-let [get-status @*get-status-fn]
+                                 (get-status)
+                                 "Status unknown")))))
+      (catch Throwable t (when (-> cli :options :verbose)
+                           (errln "Couldn't install signal handler")
+                           (.printStackTrace t))))
+
+    ; logger
     (if (-> cli :options :verbose)
-      (.addAppender (Logger/getRootLogger)                  ; 
+      (.addAppender (Logger/getRootLogger)
                     (doto (ConsoleAppender.)
                           (.setTarget "System.err")
                           (.setLayout (PatternLayout. "%d [%p|%c|%C{1}] %m%n"))
@@ -266,7 +313,8 @@
                                   (try (load-s3cfg)
                                        (catch Exception e (when (-> cli :options :verbose)
                                                             (errln "Couldn't load ~/.s3cfg, skipping:" e))))))))
-          (run (:arguments cli)
+          (run *get-status-fn
+               (:arguments cli)
                (:options cli)))
 
         (catch Throwable e (when-not (= exit-1 (.getMessage e))
