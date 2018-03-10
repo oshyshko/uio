@@ -1,20 +1,39 @@
 # Changelog
 
 ## [1.2] - unreleased
+### Fixed
+- proper escaping of ` `, `+` and `%` in `file://`, `hdfs://`, `s3://` and `sftp://`
+
 ### Added
 - `uio/attrs` that works on files and directories
+```
+(uio/attrs "file:///")
+=> {:url      "file:///"
+    :dir      true
+    :modified #inst"2018-01-30T23:27:56.000-00:00"
+    :owner    "root"
+    :group    "wheel"
+    :perms    "rwxr-xr-x"}
+```
+
 - `uio/ls` accepts `{:attrs true}` that makes it return extra keys (normally returns `:url` and `:size`/`:dir`)
+```
+(ls "file:///" {:attrs true})
+=> ({:url      "file:///Applications"
+     :dir      true
+     :modified #inst"2018-03-05T21:48:27.000-00:00"
+     :owner    "root"
+     :group    "admin"
+     :perms    "rwxrwxr-x"}
+    ...)
+```
 - `uio` command prints statistics on SIGINFO (press Ctr+T in Unix terminal)
 
 ### Modified
-- `uio/ls` returns a vector with one entry when pointed to a file (was empty vector before)
+- `uio/ls` returns a vector with one entry when pointed to a file (was empty vector before) <- plays well with `uio/concat-with`
 - `mem:///` now simulates directories and throws exceptions for dir-related errors (behaves like `file:///`)
 
-### Fixed
-- escaping of ` `, `+` and `%` in URLs
-- `file:///` now works with ` `, `+` and `%`
-
-### Changes in experimental API (not documented)
+### Other changes (not documented)
 - `uio/concat-with` that opens multiple InputStream and returns a combined InputStream
 - `uio/->countable` + `count` became => `uio/->statsable` + `uio/byte-count` due to need
   to move from `int` in `clojure.lang.Counted` to `long`.
