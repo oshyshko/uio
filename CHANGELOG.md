@@ -28,6 +28,9 @@
      :perms    "rwxrwxr-x"}
     ...)
 ```
+- `sftp://` made :known-hosts optional (if not present, disables `StrictHostKeyChecking`)
+- `sftp://` added optional :skip-owner-group-lookup that keeps UID/GID as numbers
+  -- this prevents `ls` from hanging for hosts that have no shell access disabled
 
 ### Modified
 - `uio/ls` returns a vector with one entry when pointed to a file (was empty vector before) <- plays well with `uio/concat-with`
