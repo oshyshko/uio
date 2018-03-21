@@ -61,7 +61,7 @@
 (def ymd-hm-utc (doto (SimpleDateFormat. "yyyy-MM-dd hh:mm")
                       (.setTimeZone (TimeZone/getTimeZone "UTC"))))
 
-(defn size->human-size [n]
+(defn size->human-size [^long n]
   (loop [n     (/ n 1)
          units "BKMGTPEZY"]
     (if (or (<= n 999.9)
@@ -134,19 +134,41 @@
          (str "Codecs:  " (str/join " " (map name (:codecs (impl/list-available-implementations)))))
          (str "Config:  " (home-config-url))]))
 
-(defn copy [*print-status-fn
+(defn floor-to-one-decimal [n]
+  (double (/ (long (* 10 n))
+             10)))
+
+(defn copy [*get-status
             ^Counted counted-is
             ^Counted counted-os
             ^InputStream source-is
-            ^OutputStream target-os]
+            ^OutputStream target-os
+            ^Long read-bytes-target]
   (let [started-ms (System/currentTimeMillis)]
-    (reset! *print-status-fn
-            #(-> (merge (when counted-is {:read-bytes (uio/byte-count counted-is)})
-                        (when counted-os {:written-bytes (uio/byte-count counted-os)})
-                        {:spent-ms (- (System/currentTimeMillis)
-                                      started-ms)})))
+    (reset! *get-status
+            #(let [read-bytes-maybe    (some-> counted-is uio/byte-count)
+                   written-bytes-maybe (some-> counted-os uio/byte-count)
+
+                   spent-ms            (- (System/currentTimeMillis)
+                                          started-ms)
+
+                   progress-maybe      (when read-bytes-target
+                                         (floor-to-one-decimal
+                                           (* 100
+                                              (/ (uio/byte-count counted-is)
+                                                 read-bytes-target))))
+
+                   speed-maybe         (floor-to-one-decimal
+                                         (/ (uio/byte-count counted-is)
+                                            (/ spent-ms
+                                               1000)))]
+
+               (str (or progress-maybe "??.?") "% done at " (size->human-size speed-maybe ) "/s" "\n"
+                    "(" (size->human-size (or read-bytes-maybe 0))    " in, "
+                        (size->human-size (or written-bytes-maybe 0)) " out" ")")))
+
     (jio/copy source-is target-os :buffer-size 32768)
-    (reset! *print-status-fn nil)))
+    (reset! *get-status nil)))
 
 (defn run [*print-status-fn
            [op a b :as args]
@@ -163,21 +185,23 @@
     ; TODO report read/written from source is/os, not the wrapped/unwrapped one
     "from"    (with-open [is (uio/->statsable (uio/from a))
                           os (uio/->statsable System/out)]
-                (copy *print-status-fn is os is os))
+                (copy *print-status-fn is os is os (try (uio/size a)
+                                                        (catch Exception ignore))))
 
     "from*"   (with-open [is  (uio/->statsable (uio/from a))
                           is* (impl/apply-codecs is (impl/url->seq-of-ext+s->s impl/ext->is->is a))
                           os  (uio/->statsable System/out)]
-                (copy *print-status-fn is os is* os))
+                (copy *print-status-fn is os is* os (try (uio/size a)
+                                                         (catch Exception ignore))))
 
     "to"      (with-open [is (uio/->statsable System/in)
                           os (uio/->statsable (uio/to a))]
-                (copy *print-status-fn is os is os))
+                (copy *print-status-fn is os is os nil))
 
     "to*"     (with-open [is  (uio/->statsable System/in)
                           os  (uio/->statsable (uio/to a))
                           os* (impl/apply-codecs os (impl/url->seq-of-ext+s->s impl/ext->os->os a))]
-                (copy *print-status-fn is os is os*))
+                (copy *print-status-fn is os is os* nil))
 
     "size"    (println (uio/size a))
     "exists?" (if-not (uio/exists? a) (die exit-1))
@@ -188,8 +212,9 @@
 
     ; TODO take a sample of first 32 and calculate max, keep rolling, change the pattern if numbers grow
     ; TODO remove columns completely if there are no values for that column?
-    "ls"      (->> (uio/ls a {:recurse recurse
-                              :attrs   attrs})
+    "ls"      (->> (rest args)                              ; for all given file args
+                   (mapcat #(uio/ls % {:recurse recurse
+                                       :attrs   attrs}))
                    (reduce
                      (fn [stats f]
                        (let [url (cond-> (:url f)
@@ -229,7 +254,8 @@
 
     "copy"    (with-open [is (uio/->statsable (uio/from a))    ; TODO check url-b
                           os (uio/->statsable (uio/to b))]
-                (copy *print-status-fn is os is os))
+                (copy *print-status-fn is os is os (try (uio/size a)
+                                                        (catch Exception ignore))))
 
     "_export" (->> impl/*config*
                    (map (fn [[url m]]
@@ -259,7 +285,7 @@
 ; TODO fix S3: s3cmd ls s3://geopulse-ingest/teamcity/build_383/00/
 ;
 (defn -main [& args]
-  (let [*get-status-fn (atom nil)
+  (let [*get-status (atom nil)
         cli            (cli/parse-opts args
                                        [["-r" "--recurse"        "Make `ls` recursive"                                     :default false]
                                         ["-l" "--attrs"          "Make `ls` list in long format (show attributes)"         :default false]
@@ -273,7 +299,7 @@
       (sun.misc.Signal/handle
         (sun.misc.Signal. "INFO")
         (reify sun.misc.SignalHandler
-          (handle [_ s] (errln (if-let [get-status @*get-status-fn]
+          (handle [_ _] (errln (if-let [get-status @*get-status]
                                  (get-status)
                                  "Status unknown")))))
       (catch Throwable t (when (-> cli :options :verbose)
@@ -313,7 +339,7 @@
                                   (try (load-s3cfg)
                                        (catch Exception e (when (-> cli :options :verbose)
                                                             (errln "Couldn't load ~/.s3cfg, skipping:" e))))))))
-          (run *get-status-fn
+          (run *get-status
                (:arguments cli)
                (:options cli)))
 

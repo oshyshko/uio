@@ -25,4 +25,6 @@
   (size->human-size    4194304) =>   "4M"
   (size->human-size 1073741823) => "1.0G"
   (size->human-size 1073741824) =>   "1G"
-  (size->human-size 1073741825) => "1.0G")
+  (size->human-size 1073741825) => "1.0G"
+
+  (size->human-size 9060276.4)  => "8.6M")
