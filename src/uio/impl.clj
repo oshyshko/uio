@@ -98,9 +98,8 @@
   (URLEncoder/encode s "UTF-8"))
 
 (defn escape-path ^String [^String s]
-  (str/replace (URLEncoder/encode s "UTF-8")
-               "%2F"
-               default-delimiter))
+  (-> (URLEncoder/encode s "UTF-8")                         ; keep "+" as "+" (not as "%20")
+      (str/replace "%2F" default-delimiter)))
 
 (defn unescape-url ^String [^String s]
   (when (str/includes? s " ")

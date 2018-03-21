@@ -16,7 +16,7 @@
            [uio.fs S3$S3OutputStream]))
 
 (defn bucket-key->url [b k]
-  (str "s3://" b default-delimiter k))
+  (str "s3://" b default-delimiter (escape-path k)))
 
 (defn path-no-leading-slash [^String url]
   (subs (or (path url) "?") 1))
