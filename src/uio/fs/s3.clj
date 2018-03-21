@@ -18,19 +18,22 @@
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter k))
 
-(defn path-no-slash [^String url]
-  (subs (path url) 1))
+(defn path-no-leading-slash [^String url]
+  (subs (or (path url) "?") 1))
 
 (defn ^AWSCredentialsProvider ->creds-provider [url]
-  (let [{:keys [access secret role-arn] :as creds-spec} (url->creds url)
-        creds (BasicAWSCredentials. access secret)]
+  (let [{:keys [access secret role-arn] :as creds} (url->creds url)
+        _     (if-not access (die-creds-key-not-found :access url creds))
+        _     (if-not secret (die-creds-key-not-found :secret url creds))
+        bawsc (BasicAWSCredentials. access secret)]
     (if role-arn
-      (STSAssumeRoleSessionCredentialsProvider. creds ^String role-arn "uio-s3-session")
-      (StaticCredentialsProvider. creds))))
+      (STSAssumeRoleSessionCredentialsProvider. bawsc ^String role-arn "uio-s3-session")
+      (StaticCredentialsProvider. bawsc))))
 
 (defn with-client-bucket-key [url c-b-k->x]
-  (try-with #(AmazonS3Client. (->creds-provider url))
-            #(c-b-k->x % (host url) (path-no-slash url))
+  (try-with url
+            #(AmazonS3Client. (->creds-provider url))
+            #(c-b-k->x % (host url) (path-no-leading-slash url))
             #(.shutdown %)))
 
 ; See https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html?shortFooter=true#canned-acl
@@ -51,13 +54,13 @@
                                                #(.getObjectContent
                                                   (.getObject %
                                                               (.withRange
-                                                                (GetObjectRequest. (host url) (path-no-slash url))
+                                                                (GetObjectRequest. (host url) (path-no-leading-slash url))
                                                                 start
                                                                 end)))
                                                #(.shutdown %))))
 
 (defmethod to      :s3 [url & [opts]] (wrap-os #(AmazonS3Client. (->creds-provider url))
-                                               #(S3$S3OutputStream. % (host url) (path-no-slash url) (some-> opts :acl acl->enum))
+                                               #(S3$S3OutputStream. % (host url) (path-no-leading-slash url) (some-> opts :acl acl->enum))
                                                #(.shutdown %)))
 
 (defmethod exists? :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.doesObjectExist c b k))))
@@ -101,7 +104,7 @@
                                                               (if-let [s (first (.getObjectSummaries (.listObjects c (ListObjectsRequest. b k nil nil nil))))]
                                                                 (cond
                                                                   ; a file?
-                                                                  (= (path-no-slash url)
+                                                                  (= (path-no-leading-slash url)
                                                                      (.getKey s))
                                                                   {:url url :size (.getSize s)}
 
@@ -125,7 +128,7 @@
                                       (let [opts (get-opts default-opts-ls url args)
                                             c    (AmazonS3Client. (->creds-provider url))
                                             b    (host url)
-                                            k    (path-no-slash (ensure-ends-with-delimiter url))]
+                                            k    (path-no-leading-slash (ensure-ends-with-delimiter url))]
                                         (cond->> (close-when-realized-or-finalized
                                                    #(.shutdown c)
                                                    (-ls c

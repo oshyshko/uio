@@ -4,5 +4,10 @@
             [midje.sweet :refer :all]))
 
 (facts "path-no-slash works"
-  (path-no-slash "foo://user@host:8080/some-dir/file.txt?arg=value")
-  => "some-dir/file.txt")
+  (path-no-leading-slash "foo://user@host:8080/some-dir/file.txt?arg=value") => "some-dir/file.txt"
+
+  (path-no-leading-slash "s3://bucket")       => ""
+  (path-no-leading-slash "s3://bucket/")      => ""
+  (path-no-leading-slash "s3://bucket//")     => ""
+  (path-no-leading-slash "s3://bucket//asd")  => "asd"
+  (path-no-leading-slash "s3://bucket///asd") => "asd")

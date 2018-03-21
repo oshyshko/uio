@@ -37,7 +37,7 @@
 ; Examples:
 ; (die "MUHAHA!")
 ; (die (str "Couldn't connect to: " remote-ip) e)
-(defn die [msg & [cause ex-class]] (throw (Exception. msg cause)))
+(defn die                     [msg & [cause]] (throw (Exception. msg cause)))
 
 ; TODO use everywhere + document
 (defn die-file-not-found      [url & [cause]] (die (str "File not found: "                              (pr-str url)) cause))
@@ -48,6 +48,10 @@
 (defn die-not-a-dir           [url & [cause]] (die (str "There's something, but it's not a directory: " (pr-str url)) cause))
 (defn die-parent-not-found    [url & [cause]] (die (str "Parent directory not found: "                  (pr-str url)) cause))
 (defn die-not-supported       [msg & [cause]] (throw (UnsupportedOperationException. msg cause)))
+
+(defn die-creds-key-not-found [k url creds]   (if creds
+                                                (die (str "Could not locate " k " key among keys " (keys creds) " for credentials URL " url))
+                                                (die (str "Could not locate " k " for URL: " url))))
 
 ; Example:
 ; (let [file "/non-existent/path/to/file.txt"]
@@ -198,42 +202,47 @@
                                                            (scheme %))
                                                      (keys config))
                                              url)
-        cr          (or (get config longest-url) {})        ; credentials (value) extracted by URL (key)
+        creds       (or (get config longest-url))           ; credentials (value) extracted by URL (key)
         c           (or config {})                          ; config -- for compatibility, credentials stored as keys
         e           (or env {})                             ; env    -- for compatibility, comes from JVM process (immutable, extracted as arg for testing)
 
         nie         (fn [s] (if (str/blank? s) nil s))      ; nil-if-empty
-        die-no-key  (fn [k]
-                      (if longest-url
-                        (die (str "Could not locate " k " key in among keys " (keys cr) " for credentials URL " longest-url))
-                        (die (str "Could not locate credentials for URL: " url))))
 
-        eu          (fn [k url-or-path]                     ; ensure-url
+        ensure-url  (fn [k url-or-path]                     ; ensure-url
                       (cond (nil? url-or-path) nil
                             (str/starts-with? url-or-path default-delimiter) (str "file://" url-or-path)
                             (url? url-or-path) url-or-path
                             :else (die (str "Expected URL or path that starts with / for " k ", but got: " url-or-path))))
-        ]
 
+        creds       (if creds                               ; so it's the latest "url -> creds" version
+                      creds
+                      (case (scheme url)
+                        ;        <current>             <obsolete>                    <obsolete>                  <obsolete>
+                        "hdfs" {:principal     (or (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL"))
+                                :keytab        (or (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))
+                                :access        (or (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
+                                :secret        (or (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
+
+                        "s3"   {:access        (or (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID")     (die-creds-key-not-found :access url creds))
+                                :secret        (or (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY") (die-creds-key-not-found :secret url creds))
+                                :role-arn      nil}
+
+                        "sftp" {:user          (or (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")              (die-creds-key-not-found :user        url creds))
+                                :known-hosts   (or (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")       (die-creds-key-not-found :known-hosts url creds))
+                                :pass          (or (c :sftp.pass)                (e "SFTP_PASS")             (e "SSH_PASS"))
+                                :identity      (or (c :sftp.identity)            (e "SFTP_IDENTITY")         (e "SSH_PRIVATE_KEY"))
+                                :identity-pass (or (c :sftp.identity.pass)
+                                                   (c :sftp.identity.passphrase) (e "SFTP_IDENTITY_PASS")    (e "SSH_PASSPHRASE"))}
+                        {}))]
     ; TODO post-validate pairs?
     ; TODO fail on unknown keys in `cr`?
+
+    ; if hdfs, replace empty strings with nil (required for proper work of HDFS API) + change path to URL
     (case (scheme url)
-      ;       <current>                        <current>          <obsolete>                    <obsolete>                  <obsolete>
-      "hdfs" {:principal          (nie (or (cr :principal)     (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL")))
-              :keytab (eu :keytab (nie (or (cr :keytab)        (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))))
-              :access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
-              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
-
-      "s3"   {:access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID")      (die-no-key :access))
-              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY")  (die-no-key :secret))
-              :role-arn                    (cr :role-arn)}
-
-      "sftp" {:user                    (or (cr :user)          (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")               (die-no-key :user))
-              :known-hosts             (or (cr :known-hosts)   (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")        (die-no-key :known-hosts))
-              :pass                    (or (cr :pass)          (c :sftp.pass)                (e "SFTP_PASS")             (e "SSH_PASS"))
-              :identity                (or (cr :identity)      (c :sftp.identity)            (e "SFTP_IDENTITY")         (e "SSH_PRIVATE_KEY"))
-              :identity-pass           (or (cr :identity-pass) (c :sftp.identity.pass)
-                                                               (c :sftp.identity.passphrase) (e "SFTP_IDENTITY_PASS")    (e "SSH_PASSPHRASE"))})))
+      "hdfs" (-> creds
+                 (update :principal nie)
+                 (update :keytab #(ensure-url :keytab (nie %))))
+      creds)))
 
 (defn url->creds [url]
   (url->creds' *config* (into {} (System/getenv)) url))
@@ -269,9 +278,10 @@
 ;           #(.close %))
 ; => ...returns result of `(.avaiable ...)`
 ;
-(defn try-with [->resource resouce->value close-resource]
+(defn try-with [url ->resource resouce->value close-resource]
   (let [r (->resource)]
     (try (resouce->value r)
+         (catch Exception e (die (str "Got an exception when tried to access " (pr-str url) ": " (.getMessage e)) e)) ; TODO add "using creds from <creds-url>"
          (finally (close-resource r)))))
 
 (defn get-opts [default-opts url args]                      ; {opts} -> [opt-keys] -> url -> [{opts}] -> {opts}

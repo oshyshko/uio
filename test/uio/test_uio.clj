@@ -283,7 +283,12 @@
 
       (url->creds' {} e09 "hdfs://") => (cr-e09 "hdfs://")
       (url->creds' {} e09 "s3://")   => (cr-e09 "s3://")
-      (url->creds' {} e09 "sftp://") => (cr-e09 "sftp://")) ))
+      (url->creds' {} e09 "sftp://") => (cr-e09 "sftp://")))
+
+  ; ensure nil is never returned
+  (url->creds' {}               {} "hdfs:///") => {:access nil, :keytab nil, :principal nil, :secret nil}
+  (url->creds' {"hdfs:///" nil} {} "hdfs:///") => {:access nil, :keytab nil, :principal nil, :secret nil}
+  (url->creds' {"hdfs:///" {}}  {} "hdfs:///") => {:keytab nil, :principal nil})
 
 (facts "Deducing of (de)compression codecs works, even for chained ones"
   (map first (url->seq-of-ext+s->s ext->is->is "hdfs:///far-away/and/well-archived.xz.bz2.gz")) => [:gz :bz2 :xz]
