@@ -22,11 +22,12 @@
  ;
  "s3://"   {}
 
- ; "sftp://" {:user          "joe"
- ;            :pass          "secret"                         ; optional
- ;            :known-hosts   "<ssh-rsa ...>"                  ; actual content (ssh-rsa)
- ;            :identity      "<identity-value>"               ; optional, actual content
- ;            :identity-pass "<identity-password-value>" }    ; optional, password for identity (if needed)
+ ; "sftp://" {:user                    "joe"
+ ;            :pass                    "secret"                         ; optional (either :pass or :identity is required)
+ ;            :identity                "<identity-value>"               ; optional, actual content
+ ;            :identity-pass           "<identity-password-value>" }    ; optional, password for identity (if needed)
+ ;            :known-hosts             "<ssh-rsa ...>"                  ; optional, actual content (ssh-rsa)
+ ;            :skip-owner-group-lookup false                            ; optional, defaults to false
  ;
  ; NOTE: to get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa [-p <port>] <host>`
  ;       and copy the content (skip the line starting with a #).

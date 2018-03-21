@@ -5,8 +5,8 @@
 ;
 ;  :principal       (optional)
 ;  :keytab          (optional)  <-- path to a file
-;  :access          (optional)
-;  :secret          (optional)
+;  :access          (optional)  S3 access
+;  :secret          (optional)  S3 secret
 ;
 ;  NOTE: to use `kinit` isntead of keytab file, pass empty creds (`{}` or all nil values)
 ;
