@@ -3,12 +3,15 @@
 ; sftp://host[:port]/path/to/file.txt
 ;
 ;  :user
-;  :known-hosts                 <-- actual content (ssh-rsa)
 ;
 ;  :pass
 ;     -- OR --
-;  :identity                    <-- actual content
-;  :identity-pass   (optional)  <-- (if needed)
+;  :identity                            <-- actual content
+;  :identity-pass           (optional)  <-- (if needed)
+;
+;  :known-hosts             (optional)  <-- actual content (ssh-rsa), if not specified
+;  :skip-owner-group-lookup (optional)  <-- defaults to false, disables mapping of user/group ids to names,
+;                                           can cause `ls` and `attrs` to hang if shell execution is disabled
 ;
 ;   NOTE: To get a value for known hosts, use `$ ssh-keyscan -t ssh-rsa [-p <port>] <host>`
 ;         and copy the content (skip the line starting with a #).
@@ -45,17 +48,18 @@
 (defn ->session+channel [url]                               ; -> [Session ChannelSftp]
   (let [{:keys [user
                 known-hosts
+                skip-owner-group-lookup
                 pass
                 identity
                 identity-pass]} (url->creds url)
 
         _ (if-not user                           (die "Expected :user, but got none"))
-        _ (if-not known-hosts                    (die "Expected :known-hosts, but got none"))
         _ (if-not (or pass identity)             (die "Expected either :pass or :identity to be present, but got neither"))
         _ (if (and identity-pass (not identity)) (die "Got :identity-pass without :identity"))
 
         j (JSch.)
-        _ (.setKnownHosts j (ByteArrayInputStream. (.getBytes known-hosts))) ; seems to be ignored if private key is not encrypted
+        _ (when known-hosts
+            (.setKnownHosts j (ByteArrayInputStream. (.getBytes known-hosts)))) ; seems to be ignored if private key is not encrypted
         _ (if identity
             (.addIdentity j "uio-identity"
                           (.getBytes (reformat-private-key-if-needed identity))
@@ -64,7 +68,8 @@
 
         s (.getSession j user (host url) (or (port url) 22)) ; ^Session
         _ (.setTimeout s default-timeout-ms)
-        _ (some->> (.setPassword s pass))
+        _ (.setConfig s "StrictHostKeyChecking" (if known-hosts "yes" "now"))
+        _ (.setPassword s pass)
         _ (.connect s)
 
         c (doto (.openChannel s "sftp")                     ; ^Channel
@@ -72,7 +77,8 @@
     [s c]))
 
 (defn with-session-channel [url session-channel->x]
-  (try-with #(->session+channel url)
+  (try-with url
+            #(->session+channel url)
             (fn [[s c]] (session-channel->x s c))
             (fn [[s c]] (.disconnect c)
                         (.disconnect s))))
@@ -115,7 +121,8 @@
                                                                    (rethrowing (str "Could not create directory at " url)
                                                                                (.mkdir c (path url))))))
 
-(defmethod copy    :sftp [from-url to-url & args] (try-with #(->session+channel to-url)
+(defmethod copy    :sftp [from-url to-url & args] (try-with to-url
+                                                            #(->session+channel to-url)
                                                             (fn [[_ c]]
                                                               (with-open [is (from from-url)]
                                                                 (.put c is (path to-url))))
@@ -168,7 +175,7 @@
 (defn exec->s [s line]
   (let [c (doto (.openChannel s "exec")
                 (.setCommand line)
-                (.connect default-timeout-ms))] ; if not set, this will hang forever for hosts that don't allow shell
+                (.connect default-timeout-ms))]             ; if not set, this will hang forever for hosts that don't allow shell
     (try
       (slurp (.getInputStream c))
       (finally (.disconnect c)))))
@@ -183,25 +190,35 @@
 
 (defmethod attrs :sftp [url & args] (with-session-channel url
                                                           (fn [s c]
-                                                            (f->attrs c
-                                                                      (->uid->name s)
-                                                                      (->gid->name s)
-                                                                      url
-                                                                      true
-                                                                      (.stat c (path url))))))
+                                                            (let [creds (url->creds url)]
+                                                              (f->attrs c
+                                                                        (if (:skip-owner-group-lookup creds) {} (->uid->name s))
+                                                                        (if (:skip-owner-group-lookup creds) {} (->gid->name s))
+                                                                        url
+                                                                        true
+                                                                        (.stat c (path url)))))))
 
 (defmethod ls :sftp [url & args] (single-file-or
                                    url
                                    (let [opts     (get-opts default-opts-ls url args)
-                                         [s c] (->session+channel url)
+                                         creds    (url->creds url)
+                                         [s c]    (->session+channel url)
                                          close-cs #(do (.disconnect c)
                                                        (.disconnect s))]
                                      (try
                                        (close-when-realized-or-finalized
                                          close-cs
                                          (-ls c
-                                              (if (:attrs opts) (->uid->name s) {})
-                                              (if (:attrs opts) (->gid->name s) {})
+                                              (or (and (:attrs opts)
+                                                       (not (:skip-owner-group-lookup creds))
+                                                       (->uid->name s))
+                                                  {})
+
+                                              (or (and (:attrs opts)
+                                                       (not (:skip-owner-group-lookup creds))
+                                                       (->gid->name s))
+                                                  {})
+
                                               (ensure-not-ends-with-delimiter (normalize url))
                                               (:recurse opts)
                                               (:attrs opts)))
