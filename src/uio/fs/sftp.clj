@@ -27,11 +27,10 @@
 
 (def default-timeout-ms 10000)
 
-(defn reformat-private-key-if-needed
-  "JSch expects a private key with new-line characters as described in RFC-4716.
-   However, it's usefull to pass private keys around as a single-line string where new-lines are replaced with space.
-   This fn will convert a single-line private key back to multi-line format and make JSch happy."
-  [s]
+; JSch expects a private key with new-line characters as described in RFC-4716.
+; However, it's useful  to pass private keys around as a single-line string where new-lines are replaced with space.
+; This fn will convert a single-line private key back to multi-line format and make JSch happy.
+(defn reformat-private-key-if-needed [s]
   (if (str/includes? s "\n")
     s
     (if-let [[_ header body footer] (re-find #"^(-+[^-]+-+)([^-]+)(-+[^-]+-+)" s)]
@@ -60,10 +59,15 @@
         j (JSch.)
         _ (when known-hosts
             (.setKnownHosts j (ByteArrayInputStream. (.getBytes known-hosts)))) ; seems to be ignored if private key is not encrypted
+
         _ (if identity
-            (.addIdentity j "uio-identity"
-                          (.getBytes (reformat-private-key-if-needed identity))
-                          nil
+            (.addIdentity j
+                          "uio-identity"
+                          (.getBytes (reformat-private-key-if-needed
+                                       (if (str/starts-with? identity "file://")
+                                         (slurp identity)
+                                         identity)))
+                          nil                               ; pubkey
                           (.getBytes (or identity-pass ""))))
 
         s (.getSession j user (host url) (or (port url) 22)) ; ^Session

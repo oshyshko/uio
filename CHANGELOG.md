@@ -33,6 +33,7 @@
 - `sftp://` made :known-hosts optional (if not present, disables `StrictHostKeyChecking`)
 - `sftp://` added optional :skip-owner-group-lookup that keeps UID/GID as numbers
   -- this prevents `ls` from hanging for hosts that have no shell access disabled
+- `sftp://` also accepts `file:///path/to/private-key` references in :identity (in addition to pasted contents of the file)
 - added progress percentage reported by Ctrl+T (OS X only)
 
 ### Modified
