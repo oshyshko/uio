@@ -38,8 +38,16 @@
 (defmethod exists? :mem [url & args] (do (or (contains? @*url->bytes-or-nil (ensure-not-ends-with-delimiter url))
                                              (contains? @*url->bytes-or-nil (ensure-ends-with-delimiter url)))))
 
-(defmethod delete  :mem [url & args] (do (swap! *url->bytes-or-nil dissoc url)
+(defmethod delete  :mem [url & args] (do (cond (:dir  (attrs url)) (when (seq (ls url))             (die-dir-not-empty url))
+                                               (:size (attrs url)) (when (ends-with-delimiter? url) (die-not-a-dir url))
+                                               :else               (die (str "Should never reach here. Got something that's not a file, nor a dir: " (pr-str))))
+
+                                         (swap! *url->bytes-or-nil
+                                                dissoc
+                                                (ensure-not-ends-with-delimiter url))
                                          nil))
+
+
 
 (defmethod ls      :mem [url & [op]] (do (single-file-or
                                            url

@@ -40,13 +40,13 @@
 (defn die                     [msg & [cause]] (throw (Exception. msg cause)))
 
 ; TODO use everywhere + document
-(defn die-file-not-found      [url & [cause]] (die (str "File not found: "                              (pr-str url)) cause))
-(defn die-file-access-denied  [url & [cause]] (die (str "Access denied to: "                            (pr-str url)) cause))
-(defn die-file-already-exists [url & [cause]] (die (str "File already exists: "                         (pr-str url)) cause))
-(defn die-dir-not-empty       [url & [cause]] (die (str "Directory is not empty: "                      (pr-str url)) cause))
-(defn die-dir-already-exists  [url & [cause]] (die (str "Directory already exists: "                    (pr-str url)) cause))
-(defn die-not-a-dir           [url & [cause]] (die (str "There's something, but it's not a directory: " (pr-str url)) cause))
-(defn die-parent-not-found    [url & [cause]] (die (str "Parent directory not found: "                  (pr-str url)) cause))
+(defn die-file-not-found      [url & [cause]] (die (str "File not found: "                            (pr-str url)) cause))
+(defn die-file-access-denied  [url & [cause]] (die (str "Access denied to: "                          (pr-str url)) cause))
+(defn die-file-already-exists [url & [cause]] (die (str "File already exists: "                       (pr-str url)) cause))
+(defn die-dir-not-empty       [url & [cause]] (die (str "Directory is not empty: "                    (pr-str url)) cause))
+(defn die-dir-already-exists  [url & [cause]] (die (str "Directory already exists: "                  (pr-str url)) cause))
+(defn die-not-a-dir           [url & [cause]] (die (str "There's something that is not a directory: " (pr-str url)) cause))
+(defn die-parent-not-found    [url & [cause]] (die (str "Parent directory not found: "                (pr-str url)) cause))
 (defn die-not-supported       [msg & [cause]] (throw (UnsupportedOperationException. msg cause)))
 
 (defn die-creds-key-not-found [k url creds]   (if creds
