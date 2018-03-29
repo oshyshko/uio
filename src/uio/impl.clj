@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as jio]
             [clojure.string :as str])
   (:import [clojure.lang IFn IPersistentMap Keyword]
-           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream]
+           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream BufferedInputStream BufferedOutputStream Reader Writer BufferedReader BufferedWriter]
            [java.net URI URLDecoder URLEncoder]
            [java.security Security]
            [uio.fs Streams$StatsableInputStream
@@ -99,7 +99,8 @@
 
 (defn escape-path ^String [^String s]
   (-> (URLEncoder/encode s "UTF-8")                         ; keep "+" as "+" (not as "%20")
-      (str/replace "%2F" default-delimiter)))
+      (str/replace "%2F" default-delimiter)
+      (str/replace "%3D" "=")))                             ; TODO is this right? Can "=" be part of path?
 
 (defn unescape-url ^String [^String s]
   (when (str/includes? s " ")
@@ -483,6 +484,15 @@
 
 (defn ^InputStream ->finalizing [^InputStream is]
   (Streams$FinalizingInputStream. is))
+
+(defn ->buffered [is-os-r-or-w & [size]]
+  (let [size (or size 8192)]
+    (cond (instance? InputStream  is-os-r-or-w) (BufferedInputStream.  is-os-r-or-w size)
+          (instance? OutputStream is-os-r-or-w) (BufferedOutputStream. is-os-r-or-w size)
+          (instance? Reader       is-os-r-or-w) (BufferedReader.       is-os-r-or-w size)
+          (instance? Writer       is-os-r-or-w) (BufferedWriter.       is-os-r-or-w size)
+          :else                                           (die (str "Expected InputStream, OutputStream, Reader or Writer, but got: "
+                                                                    (.getName (class is-os-r-or-w)))))))
 
 ; Count how many bytes came through a stream.
 ;

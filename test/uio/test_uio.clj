@@ -2,6 +2,7 @@
   (:require [uio.uio :refer :all]
             [uio.impl :refer [ensure-not-ends-with-delimiter
                               creds-url->creds
+                              escape-path
                               intercalate-with-dirs
                               longest-matching-prefix
                               replace-path
@@ -399,3 +400,6 @@
   (escape-url   "1 +%")     => "1+%2B%25"
   (unescape-url "1+%2B%25") => "1 +%"
   (unescape-url "1 +%20")   => (throws #"Can't unescape-url string containing space"))
+
+(facts "escape-path works"
+  (escape-path "/=") => "/=")

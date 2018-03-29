@@ -97,3 +97,10 @@
                            sort)
 
   (mem/reset))
+
+(facts "Escaping works between from/to/ls"
+  (mem/reset)
+
+  (spit (to "mem:///1=.txt") "hello") => nil
+  (ls "mem:///")                      => [{:url "mem:///1=.txt" :size 5}]
+  (slurp (from "mem:///1=.txt"))      => "hello")
