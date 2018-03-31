@@ -117,7 +117,6 @@
                                         :block-size  (-> f .getBlockSize)})))))
 
 (defmethod attrs   :hdfs [url & [opts]]
-  ; TODO implement set
   (with-hdfs url #(f->attrs true (.getFileStatus % (Path. (->URI url))))))
 
 (defmethod ls      :hdfs [url & args] (single-file-or
@@ -136,6 +135,7 @@
                                                         (map (partial f->attrs (:attrs opts))) ; [{kv}]
                                                         (close-when-realized-or-finalized #(.close fs)))
 
+                                                   ; TODO fix a case for a tree of dirs w/o files
                                                    (:recurse opts)
                                                    (intercalate-with-dirs url)))))
  
