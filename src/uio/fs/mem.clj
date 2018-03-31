@@ -23,7 +23,7 @@
                                        (ByteArrayInputStream.
                                          (if (exists? url)
                                            (or (@*url->bytes-or-nil url)
-                                               (die-dir-already-exists url))
+                                               (die-not-a-file url))
                                            (die-no-such-file url)))))
 
 (defmethod to      :mem [url & args] (let [url (normalize url)]
@@ -84,7 +84,7 @@
 (defmethod mkdir   :mem [url & args] (let [url (normalize url)]
                                        (when (exists? url)
                                          (if (:dir (attrs url))
-                                           (die-dir-already-exists (ensure-ends-with-delimiter url))
+                                           nil              ; do nothing
                                            (die-file-already-exists (ensure-not-ends-with-delimiter url))))
                                        (mkdirs-up-to url #(swap! *url->bytes-or-nil
                                                                  assoc

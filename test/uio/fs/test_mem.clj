@@ -32,10 +32,10 @@
   (ls "mem:///123/456.txt/")  => (throws NotDirectoryException #"mem:///123/456.txt")
 
   ; try creating directories over existing dir/files and reading/writing files to a directory
-  (mkdir "mem:///123")            => (throws FileAlreadyExistsException #"mem:///123/: directory already exists")
+  (mkdir "mem:///123")            => nil
   (attrs "mem:///doesn't/exist")  => (throws NoSuchFileException        #"mem:///doesn't/exist")
   (mkdir "mem:///123/456.txt")    => (throws FileAlreadyExistsException #"mem:///123/456.txt")
-  (from  "mem:///123/")           => (throws FileAlreadyExistsException #"mem:///123/")
+  (from  "mem:///123/")           => (throws #"Not a file: \"mem:///123/\"")
   (spit (to "mem:///123/") "123") => (throws FileAlreadyExistsException #"mem:///123/")
 
   ; ls

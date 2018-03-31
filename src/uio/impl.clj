@@ -52,6 +52,7 @@
 (defn die-dir-already-exists  [url]            (throw (FileAlreadyExistsException. url nil "directory already exists")))
 (defn die-dir-not-empty       [url]            (throw (DirectoryNotEmptyException. url)))
 (defn die-not-a-dir           [url]            (throw (NotDirectoryException.      url)))
+(defn die-not-a-file          [url]            (die   (str "Not a file: " (pr-str url))))
 (defn die-unsupported         [msg & [cause]]  (throw (UnsupportedOperationException. msg cause)))
 
 (defn die-creds-key-not-found [k url creds]   (if creds
@@ -617,14 +618,15 @@
   (Streams$ConcatInputStream. url->is urls))
 
 (defn mkdirs-up-to [url mkdir-url->nil]
-  (->> (iterate parent-of url)
-       (take-while some?)
-       (take-while (complement exists?))
-       (#(if (empty? %)
-           (die (str "Couldn't confirm existence of FS root to create directories up to: " (pr-str url)))
-           %))
-       (reverse)
-       (run! mkdir-url->nil)))
+  (when-not (exists? url)                                   ; TODO refactor unnecessary extra (exists? ...)
+    (->> (iterate parent-of url)
+         (take-while some?)
+         (take-while (complement exists?))
+         (reverse)
+         (#(if (empty? %)
+             (die (str "Couldn't confirm existence of FS root to create directories up to: " (pr-str url)))
+             %))
+         (run! mkdir-url->nil))))
 
 ; Implementation: defaults
 (defn default-impl [^String url ^String method args]
