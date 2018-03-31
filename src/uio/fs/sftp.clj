@@ -106,12 +106,14 @@
                                                                                 (path url))))
                                                   (finally (delete %)))))
 
-(defmethod exists? :sftp [url & args] (try (size url)
-                                           true
-                                           (catch SftpException e
-                                             (if (= ChannelSftp/SSH_FX_NO_SUCH_FILE (.id e))
-                                               false
-                                               (die (str "Couldn't determine file existence " url) e)))))
+(defmethod exists? :sftp [url & args] (with-session-channel url
+                                                            (fn [_ c]
+                                                              (try (.getSize (.stat c (path url)))
+                                                                   true
+                                                                   (catch SftpException e
+                                                                     (if (= ChannelSftp/SSH_FX_NO_SUCH_FILE (.id e))
+                                                                       false
+                                                                       (die (str "Couldn't determine file existence " url) e)))))))
 
 (defmethod delete  :sftp [url & args] (with-session-channel url
                                                             (fn [_ c]
@@ -122,8 +124,18 @@
 
 (defmethod mkdir   :sftp [url & args]      (with-session-channel url
                                                                  (fn [_ c]
-                                                                   (rethrowing (str "Could not create directory at " url)
-                                                                               (.mkdir c (path url))))))
+                                                                   (rethrowing
+                                                                     (str "Could not create directory at " url)
+                                                                     (try
+                                                                       (.mkdir c (path url))
+                                                                       (catch Exception e
+                                                                         (if (exists? url)
+                                                                           nil ; it's already there
+                                                                           (if (or (not (parent-of url)) ; root dir or has parent = die
+                                                                                   (exists? (parent-of url)))
+                                                                             (throw e)
+                                                                             ; TODO refactor to avoid 2 extra calls of (exists? ...)
+                                                                             (mkdirs-up-to url #(.mkdir c (path %)))))))))))
 
 (defmethod copy    :sftp [from-url to-url & args] (try-with to-url
                                                             #(->session+channel to-url)
