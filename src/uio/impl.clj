@@ -620,6 +620,9 @@
   (->> (iterate parent-of url)
        (take-while some?)
        (take-while (complement exists?))
+       (#(if (empty? %)
+           (die (str "Couldn't confirm existence of FS root to create directories up to: " (pr-str url)))
+           %))
        (reverse)
        (run! mkdir-url->nil)))
 

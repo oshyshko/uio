@@ -1,7 +1,8 @@
 (ns uio.fs.test-mem
   (:require [uio.fs.mem :as mem]
             [uio.impl :refer :all]
-            [midje.sweet :refer :all]))
+            [midje.sweet :refer :all])
+  (:import [java.nio.file NotDirectoryException DirectoryNotEmptyException FileAlreadyExistsException NoSuchFileException]))
 
 (facts "Mem works"
   (mem/reset)
@@ -28,14 +29,14 @@
   (spit (to "mem:///123/456/cc.txt")    "dddd") => nil
 
   (ls "mem:///123/456.txt")   => [{:url "mem:///123/456.txt" :size 1}]
-  (ls "mem:///123/456.txt/")  => (throws #"There's something that is not a directory: \"mem:///123/456.txt\"")
+  (ls "mem:///123/456.txt/")  => (throws NotDirectoryException #"mem:///123/456.txt")
 
   ; try creating directories over existing dir/files and reading/writing files to a directory
-  (mkdir "mem:///123")            => (throws #"Directory already exists")
-  (attrs "mem:///doesn't/exist")  => (throws #"File not found")
-  (mkdir "mem:///123/456.txt")    => (throws #"File already exists")
-  (from  "mem:///123/")           => (throws #"Directory already exists")
-  (spit (to "mem:///123/") "123") => (throws #"Directory already exists")
+  (mkdir "mem:///123")            => (throws FileAlreadyExistsException #"mem:///123/: directory already exists")
+  (attrs "mem:///doesn't/exist")  => (throws NoSuchFileException        #"mem:///doesn't/exist")
+  (mkdir "mem:///123/456.txt")    => (throws FileAlreadyExistsException #"mem:///123/456.txt")
+  (from  "mem:///123/")           => (throws FileAlreadyExistsException #"mem:///123/")
+  (spit (to "mem:///123/") "123") => (throws FileAlreadyExistsException #"mem:///123/")
 
   ; ls
   (ls "mem:///")        => [{:url "mem:///123/"              :dir  true}]
@@ -61,11 +62,11 @@
   (attrs "mem:///123/456/aa") => {:url "mem:///123/456/aa/" :dir true}
   (empty? (ls "mem:///123/456/aa")) => false
   
-  (delete "mem:///123/456/aa") => (throws #"Directory is not empty") ; attempt to delete a non-empty directory
+  (delete "mem:///123/456/aa") => (throws DirectoryNotEmptyException #"mem:///123/456/aa") ; attempt to delete a non-empty directory
   (delete "mem:///123/456/aa/bb.txt")
   (delete "mem:///123/456/aa")                              ; delete a dir without trailing slash
 
-  (delete "mem:///123/456/cc.txt/") => (throws #"There's something that is not a directory") ; attempt to delete a directory when it's a file
+  (delete "mem:///123/456/cc.txt/") => (throws NotDirectoryException #"mem:///123/456/cc.txt") ; attempt to delete a directory when it's a file
 
   (delete "mem:///123/456/aa.txt")                          ; delete files
   (delete "mem:///123/456/cc.txt")
@@ -102,5 +103,28 @@
   (mem/reset)
 
   (spit (to "mem:///1=.txt") "hello") => nil
+
   (ls "mem:///")                      => [{:url "mem:///1=.txt" :size 5}]
   (slurp (from "mem:///1=.txt"))      => "hello")
+
+(fact "Accessing separate FS (authorities)"
+  (mem/reset)
+
+  (spit (to "mem:///1.txt") "hello")
+  (spit (to "mem://fs-2/1.txt") "hello")
+
+  (ls "mem:///")     => [{:url "mem:///1.txt"     :size 5}]
+  (ls "mem://fs-2/") => [{:url "mem://fs-2/1.txt" :size 5}]
+
+  ; dirs
+  (mem/reset)
+
+  (mkdir "mem:///1/2/3")
+  (ls "mem:///" {:recurse true}) => [{:url "mem:///1/"     :dir true}
+                                     {:url "mem:///1/2/"   :dir true}
+                                     {:url "mem:///1/2/3/" :dir true}]
+
+  (mkdir "mem://fs-2/a/b/c")
+  (ls "mem://fs-2/" {:recurse true}) => [{:url "mem://fs-2/a/"     :dir true}
+                                         {:url "mem://fs-2/a/b/"   :dir true}
+                                         {:url "mem://fs-2/a/b/c/" :dir true}])

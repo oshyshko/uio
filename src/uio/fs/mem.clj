@@ -13,7 +13,8 @@
 (def decoy (Object.))
 
 (defn reset []
-  (reset! *url->bytes-or-nil (sorted-map "mem:///" nil)))
+  (reset! *url->bytes-or-nil {})
+  nil)
 
 (reset)
 
@@ -44,7 +45,8 @@
                                                   (count))
                                          (die-no-such-file (normalize url))))
 
-(defmethod exists? :mem [url & args] (or (contains? @*url->bytes-or-nil (ensure-not-ends-with-delimiter (normalize url)))
+(defmethod exists? :mem [url & args] (or (= default-delimiter (path url)) ; roots for any FS always exist
+                                         (contains? @*url->bytes-or-nil (ensure-not-ends-with-delimiter (normalize url)))
                                          (contains? @*url->bytes-or-nil (normalize url))))
 
 (defmethod delete  :mem [url & args] (let [url (normalize url)]
@@ -70,11 +72,11 @@
 
 (defmethod attrs   :mem [url & args] (let [url         (normalize url)
                                            url-as-file (ensure-not-ends-with-delimiter url)
-                                           bs          (get @*url->bytes-or-nil url-as-file decoy)]
-
-                                       (cond (identical? decoy bs)               (die-no-such-file url)
-                                             (and bs (ends-with-delimiter? url)) (die-not-a-dir url-as-file))
-
+                                           bs          (get @*url->bytes-or-nil url-as-file decoy)
+                                           bs          (cond (= default-delimiter (path url))    nil ; it's a root dir
+                                                             (identical? decoy bs)               (die-no-such-file url)
+                                                             (and bs (ends-with-delimiter? url)) (die-not-a-dir url-as-file)
+                                                             :else                               bs)] ; it's either dir or file
                                        (if bs
                                          {:url url :size (count bs)}
                                          {:url (ensure-ends-with-delimiter url) :dir true})))
@@ -84,7 +86,7 @@
                                          (if (:dir (attrs url))
                                            (die-dir-already-exists (ensure-ends-with-delimiter url))
                                            (die-file-already-exists (ensure-not-ends-with-delimiter url))))
-                                       (swap! *url->bytes-or-nil assoc
-                                              (ensure-not-ends-with-delimiter url)
-                                              nil)
-                                       nil))
+                                       (mkdirs-up-to url #(swap! *url->bytes-or-nil
+                                                                 assoc
+                                                                 (ensure-not-ends-with-delimiter %)
+                                                                 nil))))
