@@ -14,8 +14,8 @@
 (defmethod from    :file [url & args]   (-> url ->URI Paths/get (Files/newInputStream    (into-array OpenOption []))))
 (defmethod to      :file [url & args]   (-> url ->URI Paths/get (Files/newOutputStream   (into-array OpenOption []))))
 (defmethod exists? :file [url & args]   (-> url ->URI Paths/get (Files/exists            (into-array LinkOption []))))
-(defmethod delete  :file [url & args]   (-> url ->URI Paths/get (Files/deleteIfExists)))
-(defmethod mkdir   :file [url & args]   (-> url ->URI Paths/get (Files/createDirectories (into-array FileAttribute []))))
+(defmethod delete  :file [url & args]   (-> url ->URI Paths/get (Files/deleteIfExists)                                  (and nil)))
+(defmethod mkdir   :file [url & args]   (-> url ->URI Paths/get (Files/createDirectories (into-array FileAttribute [])) (and nil)))
 
 ; TODO assert all args are known
 (defmethod attrs :file [url & [opts]]
