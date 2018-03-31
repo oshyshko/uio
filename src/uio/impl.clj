@@ -2,18 +2,23 @@
   (:require [clojure.java.io :as jio]
             [clojure.string :as str])
   (:import [clojure.lang IFn IPersistentMap Keyword]
-           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream BufferedInputStream BufferedOutputStream Reader Writer BufferedReader BufferedWriter]
-           [java.net URI URLDecoder URLEncoder]
+           [java.io BufferedInputStream BufferedOutputStream BufferedReader BufferedWriter ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream Reader Writer]
+           [java.net URLDecoder URLEncoder URI]
            [java.security Security]
-           [uio.fs Streams$StatsableInputStream
-                   Streams$StatsableOutputStream
+           [uio.fs Streams$ConcatInputStream
                    Streams$DigestibleInputStream
                    Streams$DigestibleOutputStream
-                   Streams$NullOutputStream
                    Streams$Finalizer
-                   Streams$ConcatInputStream
                    Streams$FinalizingInputStream
-                   Streams$Statsable]))
+                   Streams$NullOutputStream
+                   Streams$Statsable
+                   Streams$StatsableInputStream
+                   Streams$StatsableOutputStream]
+           [java.nio.file AccessDeniedException
+                          DirectoryNotEmptyException
+                          FileAlreadyExistsException
+                          NoSuchFileException
+                          NotDirectoryException]))
 
 (def default-delimiter "/")
 (def default-opts-from {:offset 0
@@ -40,18 +45,22 @@
 (defn die                     [msg & [cause]] (throw (Exception. msg cause)))
 
 ; TODO use everywhere + document
-(defn die-file-not-found      [url & [cause]] (die (str "File not found: "                            (pr-str url)) cause))
-(defn die-file-access-denied  [url & [cause]] (die (str "Access denied to: "                          (pr-str url)) cause))
-(defn die-file-already-exists [url & [cause]] (die (str "File already exists: "                       (pr-str url)) cause))
-(defn die-dir-not-empty       [url & [cause]] (die (str "Directory is not empty: "                    (pr-str url)) cause))
-(defn die-dir-already-exists  [url & [cause]] (die (str "Directory already exists: "                  (pr-str url)) cause))
-(defn die-not-a-dir           [url & [cause]] (die (str "There's something that is not a directory: " (pr-str url)) cause))
-(defn die-parent-not-found    [url & [cause]] (die (str "Parent directory not found: "                (pr-str url)) cause))
-(defn die-not-supported       [msg & [cause]] (throw (UnsupportedOperationException. msg cause)))
+(defn die-no-such-file        [url & [reason]] (throw (NoSuchFileException.        url nil reason)))
+(defn die-parent-not-found    [url]            (throw (NoSuchFileException.        url nil "parent directory not found")))
+(defn die-access-denied       [url & [reason]] (throw (AccessDeniedException.      url nil reason)))
+(defn die-file-already-exists [url & [reason]] (throw (FileAlreadyExistsException. url nil reason)))
+(defn die-dir-already-exists  [url]            (throw (FileAlreadyExistsException. url nil "directory already exists")))
+(defn die-dir-not-empty       [url]            (throw (DirectoryNotEmptyException. url)))
+(defn die-not-a-dir           [url]            (throw (NotDirectoryException.      url)))
+(defn die-unsupported         [msg & [cause]]  (throw (UnsupportedOperationException. msg cause)))
 
 (defn die-creds-key-not-found [k url creds]   (if creds
                                                 (die (str "Could not locate " k " key among keys " (keys creds) " for credentials URL " url))
                                                 (die (str "Could not locate " k " for URL: " url))))
+
+(defn die-should-never-reach-here [reason]    (throw (RuntimeException. (str "Should never reach here"
+                                                                             (when reason
+                                                                               (str ": " reason))))))
 
 ; Example:
 ; (let [file "/non-existent/path/to/file.txt"]
@@ -607,6 +616,13 @@
 (defn ^InputStream concat-with [url->is urls]
   (Streams$ConcatInputStream. url->is urls))
 
+(defn mkdirs-up-to [url mkdir-url->nil]
+  (->> (iterate parent-of url)
+       (take-while some?)
+       (take-while (complement exists?))
+       (reverse)
+       (run! mkdir-url->nil)))
+
 ; Implementation: defaults
 (defn default-impl [^String url ^String method args]
   (if (scheme url)
@@ -633,7 +649,7 @@
                                                        (jio/copy is os :buffer-size 8192)))
 
 (defmethod size    :default [url & args] (or (:size (attrs url))
-                                             (die-file-not-found url)))
+                                             (die-no-such-file url)))
 
 (defmethod ext->is->is :default [_] nil)
 (defmethod ext->os->os :default [_] nil)

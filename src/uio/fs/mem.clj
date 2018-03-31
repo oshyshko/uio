@@ -23,7 +23,7 @@
                                          (if (exists? url)
                                            (or (@*url->bytes-or-nil url)
                                                (die-dir-already-exists url))
-                                           (die-file-not-found url)))))
+                                           (die-no-such-file url)))))
 
 (defmethod to      :mem [url & args] (let [url (normalize url)]
                                        (when-not (exists? (parent-of url))
@@ -32,7 +32,7 @@
                                        (when (and (exists? url)
                                                   (:dir (attrs url)))
                                          (die-dir-already-exists url))
-                                       
+
                                        (wrap-os #(ByteArrayOutputStream.)
                                                 identity
                                                 #(swap! *url->bytes-or-nil
@@ -42,7 +42,7 @@
 
 (defmethod size    :mem [url & args] (or (some->> (@*url->bytes-or-nil (normalize url))
                                                   (count))
-                                         (die-file-not-found (normalize url))))
+                                         (die-no-such-file (normalize url))))
 
 (defmethod exists? :mem [url & args] (or (contains? @*url->bytes-or-nil (ensure-not-ends-with-delimiter (normalize url)))
                                          (contains? @*url->bytes-or-nil (normalize url))))
@@ -50,12 +50,12 @@
 (defmethod delete  :mem [url & args] (let [url (normalize url)]
                                        (cond (:dir  (attrs url)) (when (seq (ls url))             (die-dir-not-empty url))
                                              (:size (attrs url)) (when (ends-with-delimiter? url) (die-not-a-dir url))
-                                             :else               (die (str "Should never reach here. Got something that's not a file, nor a dir: " (pr-str))))
+                                             :else               (die-should-never-reach-here (str "got something that's neither file, nor dir: " (pr-str)))))
 
                                        (swap! *url->bytes-or-nil
                                               dissoc
                                               (ensure-not-ends-with-delimiter url))
-                                       nil))
+                                       nil)
 
 (defmethod ls      :mem [url & [op]] (single-file-or
                                        url
@@ -72,7 +72,7 @@
                                            url-as-file (ensure-not-ends-with-delimiter url)
                                            bs          (get @*url->bytes-or-nil url-as-file decoy)]
 
-                                       (cond (identical? decoy bs)               (die-file-not-found url)
+                                       (cond (identical? decoy bs)               (die-no-such-file url)
                                              (and bs (ends-with-delimiter? url)) (die-not-a-dir url-as-file))
 
                                        (if bs

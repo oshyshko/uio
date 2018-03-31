@@ -113,7 +113,7 @@
                                                                   (loop [url-asked (ensure-ends-with-delimiter url)
                                                                          url-found (parent-of (replace-path url (str default-delimiter (.getKey s))))]
                                                                     (cond (not (str/starts-with? url-found url-asked))
-                                                                          (die-file-not-found url)
+                                                                          (die-no-such-file url)
 
                                                                           (= url-asked url-found)
                                                                           {:url url-asked :dir true}
@@ -121,7 +121,7 @@
                                                                           :else
                                                                           (recur url-asked (parent-of url-found)))))
 
-                                                                (die-file-not-found url)))))
+                                                                (die-no-such-file url)))))
 
 (defmethod ls      :s3 [url & args] (single-file-or
                                       url
