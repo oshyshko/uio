@@ -78,10 +78,11 @@
                                                #(.close %)))
 
 (defmethod exists? :hdfs [url & args] (with-hdfs url #(.exists % (Path. (->URI url)))))
-(defmethod delete  :hdfs [url & args] (with-hdfs url #(do (and (not (.delete % (Path. (->URI url)) false))
-                                                               (.exists % (Path. (->URI url)))
-                                                               (die (str "Could not delete: got `false` and the file still exists: " url) ))
-                                                          nil)))
+(defmethod delete  :hdfs [url & args] (with-hdfs url #(let [opts (get-opts default-opts-ls url args)]
+                                                        (and (not (.delete % (Path. (->URI url)) (:recurse opts)))
+                                                             (.exists % (Path. (->URI url)))
+                                                             (die (str "Could not delete: got `false` and the file still exists: " url) ))
+                                                        nil)))
 
 (defmethod mkdir   :hdfs [url & args] (with-hdfs url #(do (or (try (.mkdirs % (Path. (->URI url)))
                                                                    (catch FileAlreadyExistsException _
@@ -138,4 +139,3 @@
                                                    ; TODO fix a case for a tree of dirs w/o files
                                                    (:recurse opts)
                                                    (intercalate-with-dirs url)))))
- 

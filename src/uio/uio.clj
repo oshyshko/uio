@@ -42,11 +42,11 @@
 (def escape-url           i/escape-url)
 (def unescape-url         i/unescape-url)
 
+(def default-delimiter    i/default-delimiter)
+(def replace-path         i/replace-path)
+(def ends-with-delimiter? i/ends-with-delimiter?)
 (def with-parent          i/with-parent)
 (def parent-of            i/parent-of)
-(def ends-with-delimiter? i/ends-with-delimiter?)
-
-(def default-delimiter    i/default-delimiter)
 
 ; stream helper fns
 (def is->bytes            i/is->bytes)
