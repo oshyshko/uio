@@ -5,7 +5,6 @@
                               escape-path
                               intercalate-with-dirs
                               longest-matching-prefix
-                              replace-path
                               scheme-k
                               url->creds'
                               url->seq-of-ext+s->s
