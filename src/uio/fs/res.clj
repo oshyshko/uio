@@ -20,5 +20,3 @@
 (defmethod exists? :res [url & args] (if (.getResource Clojure (path (assert-res-url url)))
                                        true
                                        false))
-
-(exists? "res://as/uio/uio.clj1")
