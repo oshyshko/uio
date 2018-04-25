@@ -65,15 +65,19 @@
 
     c))
 
+(defn ->fs [^String url]
+  (FileSystem/newInstance (->URI url)
+                          (->config url)))
+
 (defn with-hdfs [^String url fs->x]
-  (with-open [fs (FileSystem/newInstance (->config url))]
+  (with-open [fs (->fs url)]
     (fs->x fs)))
 
-(defmethod from    :hdfs [url & args] (wrap-is #(FileSystem/newInstance (->config url))
+(defmethod from    :hdfs [url & args] (wrap-is #(->fs url)
                                                #(.open % (Path. (->URI url)))
                                                #(.close %)))
 
-(defmethod to      :hdfs [url & args] (wrap-os #(FileSystem/newInstance (->config url))
+(defmethod to      :hdfs [url & args] (wrap-os #(->fs url)
                                                #(.create % (Path. (->URI url)))
                                                #(.close %)))
 
@@ -123,7 +127,7 @@
 (defmethod ls      :hdfs [url & args] (single-file-or
                                         url
                                         (let [opts (get-opts default-opts-ls url args)
-                                              fs   (FileSystem/newInstance (->config url))
+                                              fs   (->fs url)
                                               p    (Path. (->URI url))]
                                           (cond->> (->> (if (or (str/includes? url "?")
                                                                 (str/includes? url "*"))
