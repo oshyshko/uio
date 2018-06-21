@@ -35,6 +35,7 @@
   -- this prevents `ls` from hanging for hosts that have no shell access disabled
 - `sftp://` also accepts `file:///path/to/private-key` references in :identity (in addition to pasted contents of the file)
 - added progress percentage reported by Ctrl+T (OS X only)
+- added -c/--config <URL> option to CLI that overrides config location
 
 ### Modified
 - `uio/ls` returns a vector with one entry when pointed to a file (was empty vector before) <- plays well with `uio/concat-with`

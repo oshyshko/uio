@@ -121,7 +121,9 @@
          ""
          "                      uio --help - print this help"
          ""
-         "Common flags:                 -v - print stack traces and annoying logs to stderr"
+         "Common flags:"
+         "    -v                           - print stack traces and annoying logs to stderr"
+         "    -c fs://path/to/config.clj   - use this config instead of ~/.uio/config.clj"
          ""
          "Experimental (will change in future!):"
          "                      uio ls [-rs] fs:///path/to/dir/"
@@ -138,14 +140,14 @@
   (double (/ (long (* 10 n))
              10)))
 
-(defn copy [*get-status
+(defn copy [*get-status-fn
             ^Counted counted-is
             ^Counted counted-os
             ^InputStream source-is
             ^OutputStream target-os
             ^Long read-bytes-target]
   (let [started-ms (System/currentTimeMillis)]
-    (reset! *get-status
+    (reset! *get-status-fn
             #(let [read-bytes-maybe    (some-> counted-is uio/byte-count)
                    written-bytes-maybe (some-> counted-os uio/byte-count)
 
@@ -168,9 +170,9 @@
                         (size->human-size (or written-bytes-maybe 0)) " out" ")")))
 
     (jio/copy source-is target-os :buffer-size 32768)
-    (reset! *get-status nil)))
+    (reset! *get-status-fn nil)))
 
-(defn run [*print-status-fn
+(defn run [*get-status-fn
            [op a b :as args]
            {:keys [recurse
                    attrs
@@ -185,23 +187,23 @@
     ; TODO report read/written from source is/os, not the wrapped/unwrapped one
     "from"    (with-open [is (uio/->statsable (uio/from a))
                           os (uio/->statsable System/out)]
-                (copy *print-status-fn is os is os (try (uio/size a)
-                                                        (catch Exception ignore))))
+                (copy *get-status-fn is os is os (try (uio/size a)
+                                                      (catch Exception ignore))))
 
     "from*"   (with-open [is  (uio/->statsable (uio/from a))
                           is* (impl/apply-codecs is (impl/url->seq-of-ext+s->s impl/ext->is->is a))
                           os  (uio/->statsable System/out)]
-                (copy *print-status-fn is os is* os (try (uio/size a)
-                                                         (catch Exception ignore))))
+                (copy *get-status-fn is os is* os (try (uio/size a)
+                                                       (catch Exception ignore))))
 
     "to"      (with-open [is (uio/->statsable System/in)
                           os (uio/->statsable (uio/to a))]
-                (copy *print-status-fn is os is os nil))
+                (copy *get-status-fn is os is os nil))
 
     "to*"     (with-open [is  (uio/->statsable System/in)
                           os  (uio/->statsable (uio/to a))
                           os* (impl/apply-codecs os (impl/url->seq-of-ext+s->s impl/ext->os->os a))]
-                (copy *print-status-fn is os is os* nil))
+                (copy *get-status-fn is os is os* nil))
 
     "size"    (println (uio/size a))
     "exists?" (if-not (uio/exists? a) (die exit-1))
@@ -254,8 +256,8 @@
 
     "copy"    (with-open [is (uio/->statsable (uio/from a))    ; TODO check url-b
                           os (uio/->statsable (uio/to b))]
-                (copy *print-status-fn is os is os (try (uio/size a)
-                                                        (catch Exception ignore))))
+                (copy *get-status-fn is os is os (try (uio/size a)
+                                                      (catch Exception ignore))))
 
     "_export" (->> impl/*config*
                    (map (fn [[url m]]
@@ -292,6 +294,7 @@
                                         ["-s" "--summarize"      "Make `ls` print total file size, file and dir count"     :default false]
                                         ["-h" "--human-readable" "Print sizes in human readable format (e.g., 1K 234M 2G)" :default false]
                                         ["-v" "--verbose"        "Print stack traces"                                      :default false]
+                                        ["-c" "--config URL"     "Use this config instead of ~/.uio/config.clj"]
                                         [nil "--help"            "Print help"                                              :default false]])]
 
     ; trap Ctrl+T -- print status (for long-running tasks like `copy`)
@@ -325,7 +328,12 @@
           (errln help-hint)
           (die exit-1))
 
-        (uio/with (->> (or (try (load-config (load-or-save-home-config->url)) ; config in ~
+        (uio/with (->> (or (try (some-> cli :options :config load-config) ; config specified via -c/--config
+                                (catch Exception e (throw (Exception. (str "Couldn't load config from "
+                                                                           (pr-str (some-> cli :options :config))
+                                                                           ": " e)
+                                                                      e))))
+                           (try (load-config (load-or-save-home-config->url)) ; config in ~
                                 (catch Exception e (when (-> cli :options :verbose) (errln "Couldn't load or save home config, skipping:" e))))
 
                            (try (load-config default-config-url) ; bundled config
@@ -351,3 +359,5 @@
                            (System/exit 1))
 
         (finally (System/exit 0))))))
+
+(some->> 1)
