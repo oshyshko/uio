@@ -1,24 +1,21 @@
 {
- ; Default settings per schema
+ ; For `kinit` authentication, use:
+ ; "hdfs://" {}
  ;
- ; NOTE: for `kinit` authentication, leave empty settings {}
- ; NOTE: for keytab principal + path authentication, use these settings:
- ;
+ ; For keytab principal + path authentication, use:
  ; "hdfs://" {:principal "joe"
  ;            :keytab    "file:///path/to/principal.keytab"}
  ;
- ; NOTE: to use `kinit` for authentication, add this entry:
- ;
- ; "hdfs://" {}
  ;
  "hdfs://" {}
 
+ ; To include credentials from `~/.s3cfg`, add:
+ ; "s3://" {}
+ ;
+ ; To use access/secret, add:
  ; "s3://"   {:access "access-key"
  ;            :secret "secret-key"}
  ;
- ; NOTE: to use credentials from `~/.s3cfg`, add this entry:
- ;
- ; "s3://" {}
  ;
  "s3://"   {}
 
