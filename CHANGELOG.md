@@ -5,9 +5,10 @@
 - proper escaping of ` `, `+` and `%` in `file://`, `hdfs://`, `s3://` and `sftp://`
 - don't lookup credentials from env (compatibility with v1.0) when there is a matching url in configuration
   given in (with-config ...) or in ~/.uio/config.clj (command line only)
+- make (to "s3://") able to upload files up to 5TB in size (was 52GB max)
 
 ### Added
-- `uio` command prints statistics on SIGINFO (press Ctr+T in Terminal, OS X only)
+- `uio` command prints statistics on SIGINFO (press Ctr+T in Terminal, OS X + JDK 8 only)
 - `uio/attrs` that works on files and directories
 ```
 (uio/attrs "file:///")
