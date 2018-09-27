@@ -250,7 +250,7 @@ public class Streams {
 
         public String toString() {
             return "DigestibleOutputStream{algorithm=" + md.getAlgorithm() +
-                    ", digest=" + (digest == null ? "null" : DatatypeConverter.printHexBinary(digest)) +
+                    ", digest=" + (digest == null ? "null" : printHexBinary(digest)) +
                     ", out=" + out.getClass().getName() + "}";
         }
     }
