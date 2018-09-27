@@ -77,10 +77,13 @@
                (concat
                  ; files
                  (for [^S3ObjectSummary s (.getObjectSummaries l)]
-                   (cond->  {:url  (bucket-key->url (.getBucketName s) (.getKey s))
-                             :size (.getSize s)}
-                            attrs?
-                            (merge {:modified (.getLastModified s)})))
+                   (cond-> (merge {:url (bucket-key->url (.getBucketName s) (.getKey s))}
+                                  (if (str/ends-with? (.getKey s) default-delimiter)
+                                    {:dir true}
+                                    {:size (.getSize s)}))
+
+                           attrs?
+                           (merge {:modified (.getLastModified s)})))
                  ; dirs
                  (for [^String s (.getCommonPrefixes l)]
                    {:url (cond-> (bucket-key->url b s)
@@ -103,12 +106,17 @@
                                                             (fn [c b k]
                                                               (if-let [s (first (.getObjectSummaries (.listObjects c (ListObjectsRequest. b k nil nil nil))))]
                                                                 (cond
-                                                                  ; a file?
+                                                                  ; dir?
+                                                                  (str/ends-with? (.getKey s) default-delimiter)
+                                                                  {:url (replace-path url (str default-delimiter (.getKey s)))
+                                                                   :dir true}
+
+                                                                  ; file?
                                                                   (= (path-no-leading-slash url)
                                                                      (.getKey s))
                                                                   {:url url :size (.getSize s)}
 
-                                                                  ; a dir or sub-directory? (doesn't have files)
+                                                                  ; dir or sub-dir? (w/o files) TODO requires revision
                                                                   :else
                                                                   (loop [url-asked (ensure-ends-with-delimiter url)
                                                                          url-found (parent-of (replace-path url (str default-delimiter (.getKey s))))]
