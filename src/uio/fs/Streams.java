@@ -2,7 +2,6 @@ package uio.fs;
 
 import clojure.lang.IFn;
 
-import javax.xml.bind.DatatypeConverter;
 import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -209,7 +208,7 @@ public class Streams {
 
         public String toString() {
             return "DigestibleInputStream{algorithm=" + md.getAlgorithm() +
-                    ", digest=" + (digest == null ? "null" : DatatypeConverter.printHexBinary(digest)) +
+                    ", digest=" + (digest == null ? "null" : printHexBinary(digest)) +
                     ", in=" + in.getClass().getName() + "}";
         }
     }
@@ -324,5 +323,16 @@ public class Streams {
     
     public interface Statsable {
         long getByteCount();
+    }
+
+    private static final char[] hexCode = "0123456789ABCDEF".toCharArray();
+
+    private static String printHexBinary(byte[] data) {
+        StringBuilder r = new StringBuilder(data.length * 2);
+        for (byte b : data) {
+            r.append(hexCode[(b >> 4) & 0xF]);
+            r.append(hexCode[(b & 0xF)]);
+        }
+        return r.toString();
     }
 }
