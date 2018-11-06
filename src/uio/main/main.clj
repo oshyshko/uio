@@ -208,7 +208,7 @@
     "size"    (println (uio/size a))
     "exists?" (if-not (uio/exists? a) (die exit-1))
 
-    "delete"  (uio/delete a)
+    "delete"  (uio/delete a {:recurse recurse}) ; TODO add -f flag? assert it's present for rm + add to help
 
     "mkdir"   (uio/mkdir a)
 

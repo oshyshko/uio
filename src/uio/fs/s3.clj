@@ -129,7 +129,11 @@
                                                                           :else
                                                                           (recur url-asked (parent-of url-found)))))
 
-                                                                (die-no-such-file url)))))
+                                                                ; no files? die unless it's root
+                                                                (if (ends-with-delimiter? url)
+                                                                  {:url url
+                                                                   :dir true}
+                                                                  (die-no-such-file url))))))
 
 (defmethod ls      :s3 [url & args] (single-file-or
                                       url
