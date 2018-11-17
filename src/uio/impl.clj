@@ -176,8 +176,8 @@
 (defmulti mkdir   (fn [^String url & args] (scheme-k url)))    ; -> nil
 (defmulti attrs   (fn [^String url & args] (scheme-k url)))    ; -> {:url ..., ...}
 (defmulti copy    (fn [^String from-url ^String to-url & args] ; -> nil
-                    (->URI from-url)                           ; ensure `from-url` is also parsable
-                    (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parsable)
+                    (->URI from-url)                           ; ensure `from-url` is also parseable
+                    (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parseable)
 
 ; Codecs
 (defmulti ext->is->is (fn [^String ext] ext)) ; ext -> (fn [^InputStream  is] ...wrap into another InputStream)
@@ -653,8 +653,11 @@
                                                                  os (to to-url)]
                                                        (jio/copy is os :buffer-size 8192)))
 
-(defmethod size    :default [url & args] (or (:size (attrs url))
-                                             (die-no-such-file url)))
+(defmethod size    :default [url & args] (let [as (attrs url)]
+                                           (or (:size as)
+                                               (if (:dir as)
+                                                 (die-not-a-file url)
+                                                 (die-no-such-file url)))))
 
 (defmethod ext->is->is :default [_] nil)
 (defmethod ext->os->os :default [_] nil)
