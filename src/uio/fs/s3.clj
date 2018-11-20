@@ -12,13 +12,14 @@
   (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider]
            [com.amazonaws.internal StaticCredentialsProvider]
            [com.amazonaws.services.s3 AmazonS3Client]
-           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList GetObjectTaggingRequest]
-           [uio.fs S3$S3OutputStream]))
+           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList]
+           [uio.fs S3$S3OutputStream]
+           [java.nio.file NoSuchFileException]))
 
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter (escape-path k)))
 
-(defn path-no-leading-slash [^String url]
+(defn url->key [^String url]
   (subs (or (path url) "?") 1))
 
 (defn ^AWSCredentialsProvider ->creds-provider [url]
@@ -33,7 +34,7 @@
 (defn with-client-bucket-key [url c-b-k->x]
   (try-with url
             #(AmazonS3Client. (->creds-provider url))
-            #(c-b-k->x % (host url) (path-no-leading-slash url))
+            #(c-b-k->x % (host url) (url->key url))
             #(.shutdown %)))
 
 ; See https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html?shortFooter=true#canned-acl
@@ -54,20 +55,20 @@
                                                #(.getObjectContent
                                                   (.getObject %
                                                               (.withRange
-                                                                (GetObjectRequest. (host url) (path-no-leading-slash url))
+                                                                (GetObjectRequest. (host url) (url->key url))
                                                                 start
                                                                 end)))
                                                #(.shutdown %))))
 
 (defmethod to      :s3 [url & [opts]] (wrap-os #(AmazonS3Client. (->creds-provider url))
-                                               #(S3$S3OutputStream. % (host url) (path-no-leading-slash url) (some-> opts :acl acl->enum))
+                                               #(S3$S3OutputStream. % (host url) (url->key url) (some-> opts :acl acl->enum))
                                                #(.shutdown %)))
 
-(defmethod exists? :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.doesObjectExist c b k))))
-(defmethod size    :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
-(defmethod delete  :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.deleteObject c b k))))
+(defmethod exists? :s3 [url & args] (try (attrs url)
+                                         true
+                                         (catch NoSuchFileException _ false)))
 
-(defmethod mkdir   :s3 [url & args] (do :nothing nil))      ; S3 doesn't support directories
+(defmethod size    :s3 [url & args] (with-client-bucket-key url (fn [c b k] (.getContentLength (.getObjectMetadata c b k)))))
 
 (defn -ls [c b k url recurse? attrs? delimiter marker]
   (let [^ObjectListing l (.listObjects c (ListObjectsRequest. b k marker (if recurse? nil delimiter) nil))]
@@ -102,6 +103,23 @@
                        delimiter
                        (.getNextMarker l)))))))
 
+(defmethod delete  :s3 [url & args] (let [opts (get-opts default-opts-ls url args)]
+                                      (with-client-bucket-key url
+                                                              (fn [c b k]
+                                                                (doseq [entry (if (:recurse opts)
+                                                                                (-ls c
+                                                                                     b
+                                                                                     k
+                                                                                     (ensure-ends-with-delimiter url)
+                                                                                     true
+                                                                                     false
+                                                                                     default-delimiter
+                                                                                     nil)
+                                                                                [{:url url}])]
+                                                                  (.deleteObject c b (url->key (:url entry))))))))
+
+(defmethod mkdir   :s3 [url & args] (do :nothing nil))      ; S3 doesn't support directories
+
 (defmethod attrs   :s3 [url & args] (with-client-bucket-key url
                                                             (fn [c b k]
                                                               (if-let [s (first (.getObjectSummaries (.listObjects c (ListObjectsRequest. b k nil nil nil))))]
@@ -112,7 +130,7 @@
                                                                    :dir true}
 
                                                                   ; file?
-                                                                  (= (path-no-leading-slash url)
+                                                                  (= (url->key url)
                                                                      (.getKey s))
                                                                   {:url url :size (.getSize s)}
 
@@ -130,7 +148,7 @@
                                                                           (recur url-asked (parent-of url-found)))))
 
                                                                 ; no files? die unless it's root
-                                                                (if (ends-with-delimiter? url)
+                                                                (if (= default-delimiter (url->key url))
                                                                   {:url url
                                                                    :dir true}
                                                                   (die-no-such-file url))))))
@@ -140,7 +158,7 @@
                                       (let [opts (get-opts default-opts-ls url args)
                                             c    (AmazonS3Client. (->creds-provider url))
                                             b    (host url)
-                                            k    (path-no-leading-slash (ensure-ends-with-delimiter url))]
+                                            k    (url->key (ensure-ends-with-delimiter url))]
                                         (cond->> (close-when-realized-or-finalized
                                                    #(.shutdown c)
                                                    (-ls c

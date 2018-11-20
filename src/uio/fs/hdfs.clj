@@ -82,7 +82,7 @@
                                                #(.close %)))
 
 (defmethod exists? :hdfs [url & args] (with-hdfs url #(.exists % (Path. (->URI url)))))
-(defmethod delete  :hdfs [url & args] (with-hdfs url #(let [opts (get-opts default-opts-ls url args)]
+(defmethod delete  :hdfs [url & args] (with-hdfs url #(let [opts (get-opts default-opts-delete url args)]
                                                         (and (not (.delete % (Path. (->URI url)) (:recurse opts)))
                                                              (.exists % (Path. (->URI url)))
                                                              (die (str "Could not delete: got `false` and the file still exists: " url) ))

@@ -21,10 +21,9 @@
                           NotDirectoryException]))
 
 (def default-delimiter "/")
-(def default-opts-from {:offset 0
-                        :length nil})
-(def default-opts-ls   {:recurse false
-                        :attrs   false})
+(def default-opts-from   {:offset 0 :length nil})
+(def default-opts-ls     {:recurse false :attrs false})
+(def default-opts-delete {:recurse false})
 
 (def minimal-attrs [:url                                    ; always present
                     :dir                                    ; present for dirs only and is always: `:dir true`
@@ -291,7 +290,6 @@
 (defn try-with [url ->resource resouce->value close-resource]
   (let [r (->resource)]
     (try (resouce->value r)
-         (catch Exception e (die (str "Got an exception when tried to access " (pr-str url) ": " (.getMessage e)) e)) ; TODO add "using creds from <creds-url>"
          (finally (close-resource r)))))
 
 (defn get-opts [default-opts url args]                      ; {opts} -> [opt-keys] -> url -> [{opts}] -> {opts}
