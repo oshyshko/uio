@@ -56,7 +56,7 @@
 
 (defn die-creds-key-not-found [k url creds]   (if creds
                                                 (die (str "Could not locate " k " key among keys " (keys creds) " for credentials URL " url))
-                                                (die (str "Could not locate " k " for URL: " url))))
+                                                (die (str "Could not locate creds for URL: " url))))
 
 (defn die-should-never-reach-here [reason]    (throw (RuntimeException. (str "Should never reach here"
                                                                              (when reason
@@ -146,6 +146,9 @@
                                                       (not (re-matches pattern-url-no-auth-and-path url)))
                                                (unescape-url p))))
 (defn filename      ^String  [^String url] (let [s (-> url path)
+                                                 s (if (str/ends-with? s default-delimiter)
+                                                     (subs s 0 (dec (count s)))
+                                                     s)
                                                  f (subs s (inc (str/last-index-of s default-delimiter)))]
                                              (if-not (str/blank? f)
                                                f)))
@@ -650,6 +653,8 @@
 (defmethod copy    :default [from-url to-url & args] (with-open [is (from from-url)
                                                                  os (to to-url)]
                                                        (jio/copy is os :buffer-size 8192)))
+
+(defmethod move    :default [from-url to-url & args] (default-impl from-url "move" args))
 
 (defmethod size    :default [url & args] (let [as (attrs url)]
                                            (or (:size as)

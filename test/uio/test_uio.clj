@@ -43,7 +43,7 @@
 
   (filename "file:///path/to/file+1%2B%25.txt")                  => "file 1+%.txt"
   (filename "file:///path/to")                                   => "to"
-  (filename "file:///path/to/")                                  => nil
+  (filename "file:///path/to/")                                  => "to"
 
   (query     "foo://")                                           => nil
   (query     "foo:///")                                          => nil
