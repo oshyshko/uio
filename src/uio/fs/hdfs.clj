@@ -12,6 +12,7 @@
 ;
 (ns uio.fs.hdfs
   (:require [clojure.string :as str]
+            [uio.fs.file]
             [uio.impl :refer :all])
   (:import [java.io IOException]
            [java.net URL]
@@ -143,3 +144,21 @@
                                                    ; TODO fix a case for a tree of dirs w/o files
                                                    (:recurse opts)
                                                    (intercalate-with-dirs url)))))
+
+(defmethod move :hdfs [from-url to-url & args]
+  ; TODO assert both URLs are on the same cluster (host part of URLs are equal)
+  (with-hdfs from-url
+             (fn [fs]
+               (when-not (.rename fs
+                                  (Path. (->URI from-url))
+                                  (Path. (->URI to-url)))
+                 (when-not (exists? from-url)
+                   (die-no-such-file from-url))
+                 (when (exists? from-url))
+                 (die (str "Couldn't move " (pr-str from-url) " to " (pr-str to-url)))))))
+
+
+(defn get-usage [url]
+  (with-hdfs url
+             (fn [^FileSystem fs]
+               (bean (.getContentSummary fs (Path. (->URI url)))))))
