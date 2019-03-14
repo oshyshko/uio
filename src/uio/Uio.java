@@ -56,7 +56,7 @@ public class Uio {
 
         String url     = (String) s2o.get("url");
         boolean isDir  = Boolean.TRUE.equals(s2o.get("dir"));
-        Number size    = (Number) s2o.get("size");
+        Long size      = (Long) s2o.get("size");
 
         s2o.remove("url");
         s2o.remove("dir");
@@ -65,7 +65,7 @@ public class Uio {
         return new Entry(url,
                 !isDir,
                 isDir,
-                size != null ? (long) size : -1,
+                size != null ? size : -1,
                 Collections.unmodifiableMap(s2o));
     }
 

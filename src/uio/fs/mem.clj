@@ -42,7 +42,8 @@
                                                         (.toByteArray %)))))
 
 (defmethod size    :mem [url & args] (or (some->> (@*url->bytes-or-nil (normalize url))
-                                                  (count))
+                                                  count
+                                                  long)
                                          (die-no-such-file (normalize url))))
 
 (defmethod exists? :mem [url & args] (or (= default-delimiter (path url)) ; roots for any FS always exist
@@ -91,7 +92,7 @@
                                                              (and bs (ends-with-delimiter? url)) (die-not-a-dir url-as-file)
                                                              :else                               bs)] ; it's either dir or file
                                        (if bs
-                                         {:url url :size (count bs)}
+                                         {:url url :size (long (count bs))}
                                          {:url (ensure-ends-with-delimiter url) :dir true})))
 
 (defmethod mkdir   :mem [url & args] (let [url (normalize url)]
