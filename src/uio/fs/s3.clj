@@ -12,7 +12,7 @@
   (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider]
            [com.amazonaws.internal StaticCredentialsProvider]
            [com.amazonaws.services.s3 AmazonS3Client]
-           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList]
+           [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList AmazonS3Exception]
            [uio.fs S3$S3OutputStream]
            [java.nio.file NoSuchFileException]))
 
@@ -171,3 +171,23 @@
                                                         nil)) ; nil => list from beginning
 
                                                  (:recurse opts) (intercalate-with-dirs url)))))
+
+(defmethod copy    :s3 [from-url to-url & args] (if (and (= (host from-url)
+                                                            (host to-url))
+                                                         (= (url->creds from-url)
+                                                            (url->creds to-url)))
+                                                  (with-client-bucket-key from-url
+                                                                          (fn [c _ _]
+                                                                            (try
+                                                                              (.copyObject c
+                                                                                           (host from-url)
+                                                                                           (url->key from-url)
+                                                                                           (host to-url)
+                                                                                           (url->key to-url))
+                                                                              (catch AmazonS3Exception e
+                                                                                (if (str/includes? (.getMessage e) "The specified copy source is larger than the maximum allowable size for a copy source")
+                                                                                  ((:default (.getMethodTable copy)) from-url to-url)
+                                                                                  (throw e))))
+
+                                                                            nil))
+                                                  ((:default (.getMethodTable copy)) from-url to-url)))
