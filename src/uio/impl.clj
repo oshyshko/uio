@@ -181,6 +181,10 @@
                     (->URI from-url)                           ; ensure `from-url` is also parseable
                     (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parseable)
 
+(defmulti move    (fn [^String from-url ^String to-url & args] ; -> nil
+                    (->URI from-url)                           ; ensure `from-url` is also parseable
+                    (scheme-k to-url)))                        ; dispatch on `scheme` (and ensure it's also parseable)
+
 ; Codecs
 (defmulti ext->is->is (fn [^String ext] ext)) ; ext -> (fn [^InputStream  is] ...wrap into another InputStream)
 (defmulti ext->os->os (fn [^String ext] ext)) ; ext -> (fn [^OutputStream os] ...wrap into another OutputStream)
@@ -670,7 +674,7 @@
 ;   (:require [uio.uio :as uio]      ; loads implementation
 ;             [uio.impl :as impl]))
 ;
-; (uio.impl/list-available-implementations)
+; (uio.impl/list-avaimovelable-implementations)
 ; => {:fs     [:file :hdfs :http :https :mem :res :s3 :sftp]
 ;     :codecs [:bz2 :gz :xz]}
 ;

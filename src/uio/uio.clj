@@ -13,6 +13,7 @@
 (def mkdir                i/mkdir)
 (def attrs                i/attrs)
 (def copy                 i/copy)
+(def move                 i/move)
 (def from*                i/from*)
 (def to*                  i/to*)
 (def concat-with          i/concat-with)
