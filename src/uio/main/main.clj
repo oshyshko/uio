@@ -3,7 +3,8 @@
             [uio.impl :refer [die] :as impl]
             [clojure.string :as str]
             [clojure.java.io :as jio]
-            [clojure.tools.cli :as cli])
+            [clojure.tools.cli :as cli]
+            [uio.fs.hdfs :as hdfs])
   (:import [org.apache.log4j Level Logger ConsoleAppender PatternLayout]
            [java.text SimpleDateFormat]
            [java.util TimeZone]
@@ -259,6 +260,48 @@
                 (copy *get-status-fn is os is os (try (uio/size a)
                                                       (catch Exception ignore))))
 
+    "du"   (let [url        a
+                 _          (when (not= "hdfs" (uio/scheme url))
+                              (die (str "`du` support 'hdfs' only, actual scheme was: " (pr-str (uio/scheme url)) " in URL " url)))
+                 es         (->> (uio/ls url)
+                                 (map (fn [{:keys [url dir] :as m}]
+                                        (merge m
+                                               (when dir
+                                                 (try (let [u (hdfs/get-usage url)]
+                                                        {:size          (:length u)
+                                                         :size-consumed (:spaceConsumed u)})
+                                                      (catch Exception e {:size  0
+                                                                          :error e}))))))
+                                 (sort-by :size)
+                                 reverse)
+
+                 max-size   (:size (first es))
+                 total-size (reduce #(+ %1 (:size %2)) 0 es)]
+
+             (println "  size allrep                          URL")
+             (doseq [{:keys [url size size-consumed error]} es
+                     :let [bar-count  (int (* 20 (/ size max-size)))
+                           percentage (min 99 (int (* 100 (/ size total-size))))]]
+               (binding [*out* (if error *err* *out*)]
+                 (println
+                   (if error
+                     (str (str/join "\n" (take 3 (str/split-lines (.getMessage error)))))
+                     (str
+                       (format "%6s" (size->human-size size))
+                       (format " %6s" (size->human-size (or size-consumed size)))
+                       (format " %20s" (if (zero? bar-count)
+                                         "."
+                                         (str/join (replicate bar-count "-"))))
+                       " "
+                       (if (zero? percentage)
+                         "  ."
+                         (format "%2d%%" percentage))
+                       " "
+                       url)))))
+
+             (when (reduce #(or %1 %2) false (map :error es))
+               (die exit-1)))
+
     "_export" (->> impl/*config*
                    (map (fn [[url m]]
                           (str url
@@ -359,5 +402,3 @@
                            (System/exit 1))
 
         (finally (System/exit 0))))))
-
-(some->> 1)
