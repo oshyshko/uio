@@ -1,7 +1,7 @@
 (ns uio.impl
   (:require [clojure.java.io :as jio]
             [clojure.string :as str])
-  (:import [clojure.lang IFn IPersistentMap Keyword]
+  (:import [clojure.lang IFn IPersistentMap Keyword MultiFn]
            [java.io BufferedInputStream BufferedOutputStream BufferedReader BufferedWriter ByteArrayInputStream ByteArrayOutputStream Closeable FilterInputStream FilterOutputStream InputStream OutputStream Reader Writer]
            [java.net URLDecoder URLEncoder URI]
            [java.security Security]
@@ -658,7 +658,26 @@
                                                                  os (to to-url)]
                                                        (jio/copy is os :buffer-size 8192)))
 
-(defmethod move    :default [from-url to-url & args] (default-impl from-url "move" args))
+; uses `attrs`, `copy`, `delete` and `mkdir` to move single files or dirs (recursively)
+(defmethod move    :default [from-url to-url & args] (let [from-url-d (ensure-ends-with-delimiter from-url)
+                                                           to-url-d   (ensure-ends-with-delimiter to-url)]
+
+                                                       ; TODO prevent attempts of moving a parent dir into child
+                                                       ; TODO get attrs of from-url and check whether it's a dir
+                                                       ; TODO get attrs of to-url and if it exists, ensure it matches dir/file type of from-url
+                                                       ;(when (str/starts-with? to-url from-url)
+                                                       ;  (die (str "Can't move parent URL " (pr-str from-url)
+                                                       ;            " to child URL " (pr-str to-url))))
+
+                                                       (doseq [e (->> (ls from-url {:recurse true})
+                                                                      (#(if (seq %)
+                                                                          %
+                                                                          (die-no-such-file from-url))))
+                                                               :let [target-url (str to-url (subs (count from-url) (:url e)))]]
+                                                         (cond (:size e) (do (copy from-url to-url)
+                                                                             (delete from-url))
+                                                               (:dir e)  (mkdir target-url)
+                                                               :else     (die-no-such-file (:url e))))))
 
 (defmethod size    :default [url & args] (let [as (attrs url)]
                                            (or (:size as)
@@ -685,3 +704,9 @@
 (defn close-when-realized-or-finalized [->close xs]
   (let [f (Streams$Finalizer. ->close)]
     (concat xs (lazy-seq (.close f)))))
+
+; Call :default implementation of multimethod `m` with `args`
+(defn invoke-default [^MultiFn m & args]
+  (apply (or (:default (.getMethodTable m))
+             (die (str "Couldn't find implementation :default of multimethod " m)))
+         args))

@@ -146,7 +146,11 @@
                                                    (intercalate-with-dirs url)))))
 
 (defmethod move :hdfs [from-url to-url & args]
-  ; TODO assert both URLs are on the same cluster (host part of URLs are equal)
+  (when-not (= (host from-url)
+               (host to-url))
+    (die (str "Expected from-url " (pr-str from-url) " and to-url " (pr-str to-url)
+              " to be on the same cluster (have same host part).")))
+
   (with-hdfs from-url
              (fn [fs]
                (when-not (.rename fs
@@ -156,7 +160,6 @@
                    (die-no-such-file from-url))
                  (when (exists? from-url))
                  (die (str "Couldn't move " (pr-str from-url) " to " (pr-str to-url)))))))
-
 
 (defn get-usage [url]
   (with-hdfs url

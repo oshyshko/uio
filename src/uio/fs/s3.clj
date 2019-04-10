@@ -176,6 +176,7 @@
                                                             (host to-url))
                                                          (= (url->creds from-url)
                                                             (url->creds to-url)))
+
                                                   (with-client-bucket-key from-url
                                                                           (fn [c _ _]
                                                                             (try
@@ -184,10 +185,10 @@
                                                                                            (url->key from-url)
                                                                                            (host to-url)
                                                                                            (url->key to-url))
+                                                                              nil
                                                                               (catch AmazonS3Exception e
                                                                                 (if (str/includes? (.getMessage e) "The specified copy source is larger than the maximum allowable size for a copy source")
-                                                                                  ((:default (.getMethodTable copy)) from-url to-url)
-                                                                                  (throw e))))
+                                                                                  (invoke-default copy from-url to-url)
+                                                                                  (throw e))))))
 
-                                                                            nil))
-                                                  ((:default (.getMethodTable copy)) from-url to-url)))
+                                                  (invoke-default copy from-url to-url)))
