@@ -20,7 +20,7 @@
   (str "s3://" b default-delimiter (escape-path k)))
 
 (defn url->key [^String url]
-  (subs (or (path url) "?") 1))
+  (subs (or (path url) "_") 1))
 
 (defn ^AWSCredentialsProvider ->creds-provider [url]
   (let [{:keys [access secret role-arn] :as creds} (url->creds url)
@@ -136,19 +136,26 @@
 
                                                                   ; dir or sub-dir? (w/o files) TODO requires revision
                                                                   :else
-                                                                  (loop [url-asked (ensure-ends-with-delimiter url)
-                                                                         url-found (parent-of (replace-path url (str default-delimiter (.getKey s))))]
-                                                                    (cond (not (str/starts-with? url-found url-asked))
-                                                                          (die-no-such-file url)
+                                                                  ; can it be a dir somewhere that is preceded file(s) with the same prefix?
+                                                                  (if (not (str/ends-with? k default-delimiter))
 
-                                                                          (= url-asked url-found)
-                                                                          {:url url-asked :dir true}
+                                                                    ; ...try add / to the end
+                                                                    (recur c b (str k default-delimiter))
 
-                                                                          :else
-                                                                          (recur url-asked (parent-of url-found)))))
+                                                                    ; other wise dig up and see if there's a matching parent
+                                                                    (loop [url-asked (ensure-ends-with-delimiter url)
+                                                                           url-found (parent-of (replace-path url (str default-delimiter (.getKey s))))]
+                                                                      (cond (not (str/starts-with? url-found url-asked))
+                                                                            (die-no-such-file url)
+
+                                                                            (= url-asked url-found)
+                                                                            {:url url-asked :dir true}
+
+                                                                            :else
+                                                                            (recur url-asked (parent-of url-found))))))
 
                                                                 ; no files? die unless it's root
-                                                                (if (= default-delimiter (url->key url))
+                                                                (if (= default-delimiter (path url))
                                                                   {:url url
                                                                    :dir true}
                                                                   (die-no-such-file url))))))
