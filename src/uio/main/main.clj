@@ -116,9 +116,16 @@
          ""
          "                      uio copy     fs:///source/path/to/file.txt fs:///destination/path/to/file.txt"
          ""
-         "                      uio ls [-lh] fs:///path/to/dir/"
+         "                      uio ls [-lhrs] fs:///path/to/dir/"
          "                              -l - list in long format (show attributes)"
          "                              -h - print sizes in human readable format"
+         "                              -r - recurse into subdirectories"
+         "                              -s - summarize size, file and directory count"
+         ""
+         "                      uio top [-hts] hdfs://path/to/"
+         "                              -h - print sizes in human readable format"
+         "                              -t - print a chart with relative sizes and percentages"
+         "                              -s - summarize size"
          ""
          "                      uio --help - print this help"
          ""
@@ -175,9 +182,11 @@
 
 (defn run [*get-status-fn
            [op a b :as args]
-           {:keys [recurse
-                   attrs
-                   human-readable] :as opts}]
+           {:keys [attrs
+                   chart
+                   human-readable
+                   recurse
+                   summarize] :as opts}]
 
   ; TODO validate arg count
   ; TODO validate 1st and 2args are urls
@@ -248,59 +257,72 @@
 
                      {:size 0 :files 0 :dirs 0})
 
-                   (#(when (:summarize opts)
+                   (#(when summarize
                        (println (str (if human-readable
                                        (size->human-size (:size %))
                                        (str (:size %) " byte" (s-if-plural (:size %))))
-                                     ", " (:files %) " file" (s-if-plural (:files %))
-                                     ", " (:dirs %) " dir" (s-if-plural (:dirs %)))))))
+                                      ", " (:files %) " file" (s-if-plural (:files %))
+                                      ", "  (:dirs %) " dir"  (s-if-plural (:dirs %)))))))
 
     "copy"    (with-open [is (uio/->statsable (uio/from a))    ; TODO check url-b
                           os (uio/->statsable (uio/to b))]
                 (copy *get-status-fn is os is os (try (uio/size a)
-                                                      (catch Exception ignore))))
+                                                      (catch Exception _))))
 
-    "du"   (let [url        a
-                 _          (when (not= "hdfs" (uio/scheme url))
-                              (die (str "`du` support 'hdfs' only, actual scheme was: " (pr-str (uio/scheme url)) " in URL " url)))
-                 es         (->> (uio/ls url)
-                                 (map (fn [{:keys [url dir] :as m}]
-                                        (merge m
-                                               (when dir
-                                                 (try (let [u (hdfs/get-usage url)]
-                                                        {:size          (:length u)
-                                                         :size-consumed (:spaceConsumed u)})
-                                                      (catch Exception e {:size  0
-                                                                          :error e}))))))
-                                 (sort-by :size)
-                                 reverse)
+    "top"     (let [url             a
+                    _               (when (not= "hdfs" (uio/scheme url))
+                                      (die (str "`top` supports 'hdfs' only. Actual scheme was: " (pr-str (uio/scheme url)) " in URL " url)))
+                    es              (->> (uio/ls url)
+                                         (map (fn [{:keys [url dir] :as m}]
+                                                (merge m
+                                                       (when dir
+                                                         (try (let [u (hdfs/get-usage url)]
+                                                                {:size (:length u)})
+                                                              (catch Exception e {:size  0
+                                                                                  :error e}))))))
+                                         (sort-by :size)
+                                         reverse)
 
-                 max-size   (:size (first es))
-                 total-size (reduce #(+ %1 (:size %2)) 0 es)]
+                    total-size      (reduce #(+ %1 (:size %2)) 0 es)
+                    max-size        (:size (first es))
+                    max-size-format (str "%" (count (str (if summarize
+                                                           max-size
+                                                           total-size))) "s")
 
-             (println "  size allrep                          URL")
-             (doseq [{:keys [url size size-consumed error]} es
-                     :let [bar-count  (int (* 20 (/ size max-size)))
-                           percentage (min 99 (int (* 100 (/ size total-size))))]]
-               (binding [*out* (if error *err* *out*)]
-                 (println
-                   (if error
-                     (str (str/join "\n" (take 3 (str/split-lines (.getMessage error)))))
-                     (str
-                       (format "%6s" (size->human-size size))
-                       (format " %6s" (size->human-size (or size-consumed size)))
-                       (format " %20s" (if (zero? bar-count)
-                                         "."
-                                         (str/join (replicate bar-count "-"))))
-                       " "
-                       (if (zero? percentage)
-                         "  ."
-                         (format "%2d%%" percentage))
-                       " "
-                       url)))))
+                    col-size        (if human-readable
+                                      #(format "%6s" (size->human-size %))
+                                      #(format max-size-format %))
 
-             (when (reduce #(or %1 %2) false (map :error es))
-               (die exit-1)))
+                    col-chart       (if chart
+                                      #(format " %20s" (if (zero? %1)
+                                                         ""
+                                                         (str/join (replicate %2 "-"))))
+                                      (constantly nil))
+                    col-percentage  (if chart
+                                      #(if (zero? %)
+                                         "    "
+                                         (format "%3d%%" %))
+                                      (constantly nil))]
+
+                (doseq [{:keys [url size error]} es
+                        :let [bar-count      (int (* 20 (/ size max-size)))
+                              percentage     (int (* 100 (/ size total-size)))]]
+
+                  (binding [*out* (if error *err* *out*)]
+                    (println
+                      (if error
+                        (str (str/join "\n" (take 2 (str/split-lines (.getMessage error)))))
+                        (str
+                          (col-size size)
+                          (col-chart percentage bar-count)
+                          (col-percentage percentage)
+                          " "
+                          url)))))
+                (when summarize
+                  (println (col-size total-size)))
+
+                (when (reduce #(or %1 %2) false (map :error es))
+                  (die exit-1)))
 
     "_export" (->> impl/*config*
                    (map (fn [[url m]]
@@ -336,6 +358,7 @@
                                         ["-l" "--attrs"          "Make `ls` list in long format (show attributes)"         :default false]
                                         ["-s" "--summarize"      "Make `ls` print total file size, file and dir count"     :default false]
                                         ["-h" "--human-readable" "Print sizes in human readable format (e.g., 1K 234M 2G)" :default false]
+                                        ["-t" "--chart"          "Print a chart with relative sizes and percentages)"      :default false]
                                         ["-v" "--verbose"        "Print stack traces"                                      :default false]
                                         ["-c" "--config URL"     "Use this config instead of ~/.uio/config.clj"]
                                         [nil "--help"            "Print help"                                              :default false]])]
