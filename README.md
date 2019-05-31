@@ -434,6 +434,7 @@ This will also work for S3 buckets/paths and SSH hosts/ports/paths.
 You can override multiple URL prefixes, the rule of thumb is: the longest URL prefix that matches your URL wins.
 
 ## License
+Copyright © Oleksandr Shyshko. All rights reserved.
 
 The use and distribution terms for this software are covered by the
 Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
