@@ -6,66 +6,72 @@
 (ns uio.fs.file
   (:require [uio.impl :refer :all])
   (:import [java.io File]
-           [java.nio.file Files Paths OpenOption LinkOption Path]
+           [java.nio.file Files Paths OpenOption LinkOption]
            [java.nio.file.attribute FileAttribute PosixFileAttributes PosixFilePermissions]
            [java.util Date]))
 
 ; TODO implement :offset + :length + assert all args are known
 (defmethod from    :file [url & args]   (-> url ->URI Paths/get (Files/newInputStream    (into-array OpenOption []))))
 (defmethod to      :file [url & args]   (-> url ->URI Paths/get (Files/newOutputStream   (into-array OpenOption []))))
-(defmethod size    :file [url & args]   (-> url ->URI Paths/get (Files/size)))
 (defmethod exists? :file [url & args]   (-> url ->URI Paths/get (Files/exists            (into-array LinkOption []))))
-(defmethod delete  :file [url & args]   (-> url ->URI Paths/get (Files/deleteIfExists)))
-(defmethod mkdir   :file [url & args]   (-> url ->URI Paths/get (Files/createDirectories (into-array FileAttribute []))))
+(defmethod delete  :file [url & args]   (-> url ->URI Paths/get (Files/deleteIfExists)                                  (and nil)))
+(defmethod mkdir   :file [url & args]   (-> url ->URI Paths/get (Files/createDirectories (into-array FileAttribute [])) (and nil)))
 
 ; TODO assert all args are known
-(defmethod attrs   :file [url & [opts]] (Files/setPosixFilePermissions (Paths/get (->URI url))
-                                                                                  (PosixFilePermissions/fromString (:perms opts))))
+(defmethod attrs :file [url & [opts]]
+  ; TODO implement :owner :group :modified :accessed
+  (when (:perms opts)
+    (Files/setPosixFilePermissions (Paths/get (->URI url))
+                                   (PosixFilePermissions/fromString (:perms opts))))
+  ; TODO implement :accessed
+  (let [p          (Paths/get (->URI url))
+        is-symlink (Files/isSymbolicLink p)
+        is-dir     (Files/isDirectory p (into-array LinkOption []))
+        as         (Files/readAttributes p PosixFileAttributes (into-array LinkOption []))]
 
-(defn f->kv [file-url attrs? is-dir is-symlink ^Path f]
-  (try
-    (merge {:url file-url}
+    (merge {:url url}
 
            (if is-dir
              {:dir true}
-             {:size (Files/size f)})
+             {:size (Files/size p)})
 
-           (if attrs?
-             (let [attrs (Files/readAttributes f PosixFileAttributes (into-array LinkOption []))]
-               (merge {:modified (Date. (.toMillis (.lastModifiedTime attrs)))
-                       :owner    (-> attrs .owner .getName)
-                       :group    (-> attrs .group .getName)
-                       :perms    (PosixFilePermissions/toString (.permissions attrs))}
-                      (if is-symlink
-                        {:symlink (->> (Files/readSymbolicLink f) ; resolve absolute + relative link
-                                       (.resolve (.resolveSibling f "."))
-                                       (.normalize)
-                                       (#(str "file://" % (if is-dir default-delimiter))))})))))
+           {:modified (Date. (.toMillis (.lastModifiedTime as)))
+            :owner    (-> as .owner .getName)
+            :group    (-> as .group .getName)
+            :perms    (PosixFilePermissions/toString (.permissions as))}
 
-    (catch Exception e {:url file-url :error e})))
+           (if is-symlink
+             {:symlink (->> (Files/readSymbolicLink p)      ; resolve absolute + relative link
+                            (.resolve (.resolveSibling p "."))
+                            (.normalize)
+                            (#(str "file://" % (if is-dir default-delimiter))))}))))
 
 (defn -ls [url recurse? attrs?]
   (try
     (let [s (-> url ->URI Paths/get Files/list)]
       (->> (iterator-seq (.iterator s))
            (sort-by #(.getFileName %))
-           (mapcat #(let [is-symlink (Files/isSymbolicLink %)
-                          is-dir     (Files/isDirectory % (into-array LinkOption []))
-                          file-url   (str (.toUri %))]      ; already ends with /
-                      (cons (f->kv file-url attrs? is-dir is-symlink %)
-                            (if (and is-dir
+           (mapcat #(let [url (replace-path "file:///" (str %))
+                          as  (try (attrs (replace-path "file:///" (str %)))
+                                   (catch Exception e {:url url :error e}))]
+                      (cons (if attrs?
+                              as
+                              (select-keys as minimal-attrs))
+                            (if (and (:dir as)
                                      recurse?
-                                     (and (not is-symlink)))
-                              (lazy-seq (-ls file-url recurse? attrs?))))))
+                                     (and (not (:symlink as))))
+                              (lazy-seq (-ls (:url as) recurse? attrs?))))))
 
            (close-when-realized-or-finalized #(.close s))))
 
     (catch Exception e [{:url url :error e}])))
 
-(defmethod ls      :file [url & args] (let [opts (get-opts default-opts-ls url args)]
-                                        (-ls (normalize url)
+(defmethod ls      :file [url & args] (single-file-or
+                                        url
+                                        (let [opts (get-opts default-opts-ls url args)]
+                                          (-ls (normalize url)
                                                (:recurse opts)
-                                               (:attrs opts))))
+                                               (:attrs opts)))))
 
 ; TODO consider removing or moving elsewhere
 (defn path->url   ^String [^String path]  (str (.toURI (File. path))))

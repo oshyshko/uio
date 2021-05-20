@@ -4,9 +4,8 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.*;
 
 import javax.xml.bind.DatatypeConverter;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -14,27 +13,38 @@ import java.util.List;
 
 public class S3 {
     public static class S3OutputStream extends OutputStream {
-        private static final int BUFFER_SIZE = 5 * 1024 * 1024; // 5MB -- required minimum by S3 API
+        // https://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html
+        // Maximum object size	                5 TB
+        // Maximum number of parts per upload	10,000
+        // Part numbers	                        1 to 10,000 (inclusive)
+        // Part size	                        5 MB to 5 GB, last part can be < 5 MB
+        //
+        // 549,755,814 bytes per part -- enough to cover a 5TB file with 10000 parts
+        private static final int PART_SIZE = (int) (((5L * 1024 * 1024 * 1024 * 1024) / 10000) + 1);
 
         private final AmazonS3Client c;
         private final InitiateMultipartUploadResult init;
 
         private final List<PartETag> tags = new ArrayList<>();
 
-        private final byte[] buffer = new byte[BUFFER_SIZE];
         private final MessageDigest inDigest = MessageDigest.getInstance("MD5");
         private final MessageDigest outDigest = MessageDigest.getInstance("MD5");
+        private final MessageDigest partDigest = MessageDigest.getInstance("MD5");
 
-        private final MessageDigest localPartDigest = MessageDigest.getInstance("MD5");
-
-        private int bufferOffset;
+        private final File partTempFile;
+        private Streams.StatsableOutputStream partOutputStream;
         private int partIndex;
 
-        public S3OutputStream(AmazonS3Client c, String bucket, String key, CannedAccessControlList cannedAclOrNull) throws NoSuchAlgorithmException {
+        private boolean closed;
+
+        public S3OutputStream(AmazonS3Client c, String bucket, String key, CannedAccessControlList cannedAclOrNull) throws NoSuchAlgorithmException, IOException {
             this.c = c;
 
             init = c.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key)
                     .withCannedACL(cannedAclOrNull)); // setting only here, not setting in UploadPartRequest
+
+            partTempFile = Files.createTempFile("uio-s3-part-", ".tmp").toFile();
+            partOutputStream = new Streams.StatsableOutputStream(new FileOutputStream(partTempFile));
         }
 
         public void write(int b) throws IOException {
@@ -42,45 +52,44 @@ public class S3 {
         }
 
         public void write(byte[] bs, int offset, int length) throws IOException {
+            assertOpen();
             inDigest.update(bs, offset, length);
 
             while (length != 0) {
                 // flush buffer if full
-                if (bufferOffset == BUFFER_SIZE) {
+                if (PART_SIZE == partOutputStream.getByteCount())
                     _flush(false);
-                    bufferOffset = 0;
-                }
 
-                int bytesToCopy = Math.min(BUFFER_SIZE - bufferOffset, length);
+                int bytesToCopy = Math.min(PART_SIZE - (int) partOutputStream.getByteCount(), length);
 
-                // move to buffer
-                System.arraycopy(
-                        bs, offset,
-                        buffer, bufferOffset,
-                        bytesToCopy);
+                // append to buffer
+                partOutputStream.write(bs, offset, bytesToCopy);
 
-                bufferOffset += bytesToCopy;
+                partDigest.update(bs, offset, bytesToCopy);
+                outDigest.update(bs, offset, bytesToCopy);
 
                 offset += bytesToCopy;
                 length -= bytesToCopy;
             }
         }
 
+        private void assertOpen() throws IOException {
+            if (closed)
+                throw new IOException("Can't write to closed stream");
+        }
+
         private void _flush(boolean isLastPart) throws IOException {
-            outDigest.update(buffer, 0, bufferOffset);
+            partOutputStream.close();
 
-            localPartDigest.reset();
-            localPartDigest.update(buffer, 0, bufferOffset);
-
-            String localPartEtag = hex(localPartDigest.digest());
+            String localPartEtag = hex(partDigest.digest());
             try {
                 UploadPartRequest upr = new UploadPartRequest()
                         .withBucketName(init.getBucketName())
                         .withKey(init.getKey())
                         .withUploadId(init.getUploadId())
                         .withPartNumber(partIndex + 1)
-                        .withInputStream(new ByteArrayInputStream(buffer, 0, bufferOffset))
-                        .withPartSize(bufferOffset)
+                        .withFile(partTempFile)
+                        .withPartSize(partOutputStream.getByteCount())
                         .withLastPart(isLastPart);
 
                 PartETag remotePartEtag = c.uploadPart(upr).getPartETag();
@@ -92,6 +101,8 @@ public class S3 {
                             " - remote: " + remotePartEtag.getETag());
                 }
 
+                partDigest.reset();
+                partOutputStream = new Streams.StatsableOutputStream(new FileOutputStream(partTempFile));
                 partIndex++;
             } catch (Exception e) {
                 abort();
@@ -100,6 +111,9 @@ public class S3 {
         }
 
         public void close() throws IOException {
+            if (closed)
+                return;
+
             _flush(true);
             try {
                 String read = hex(inDigest.digest());
@@ -114,11 +128,11 @@ public class S3 {
                         new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags)
                 ).getETag();
 
-                localPartDigest.reset();
+                partDigest.reset();
                 for (PartETag tag : tags) {
-                    localPartDigest.update(unhex(tag.getETag()));
+                    partDigest.update(unhex(tag.getETag()));
                 }
-                String localEtag = hex(localPartDigest.digest()) + "-" + partIndex;
+                String localEtag = hex(partDigest.digest()) + "-" + partIndex;
 
                 if (!localEtag.equals(remoteEtag))
                     throw new RuntimeException("Etags don't match:\n" +
@@ -128,6 +142,8 @@ public class S3 {
                 abort(); // TODO delete remote file if exception happened after `c.completeMultipartUpload(...)`
                 throw e;
             }
+            closed = true;
+            partTempFile.delete();
         }
 
         private static String hex(byte[] bs) {

@@ -13,8 +13,11 @@
 (def mkdir                i/mkdir)
 (def attrs                i/attrs)
 (def copy                 i/copy)
+(def move                 i/move)
 (def from*                i/from*)
 (def to*                  i/to*)
+(def concat-with          i/concat-with)
+
 (def ext->is->is          i/ext->is->is)
 (def ext->os->os          i/ext->os->os)
 
@@ -40,11 +43,11 @@
 (def escape-url           i/escape-url)
 (def unescape-url         i/unescape-url)
 
+(def default-delimiter    i/default-delimiter)
+(def replace-path         i/replace-path)
+(def ends-with-delimiter? i/ends-with-delimiter?)
 (def with-parent          i/with-parent)
 (def parent-of            i/parent-of)
-(def ends-with-delimiter? i/ends-with-delimiter?)
-
-(def default-delimiter    i/default-delimiter)
 
 ; stream helper fns
 (def is->bytes            i/is->bytes)
@@ -56,9 +59,11 @@
 (def encode               i/encode)
 
 (def ->nil-os             i/->nil-os)
-(def ->countable          i/->countable)                    ; use with (count ...)
 (def ->digestible         i/->digestible)                   ; use with (close-and-digest ...)
 (def close-and-digest     i/close-and-digest)
+
+(def ->statsable          i/->statsable)                    ; use with (byte-count ...)
+(def byte-count           i/byte-count)
 
 ; TODO consider replacing the above with something like:
 ; (defmacro pull-all [ns]
