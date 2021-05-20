@@ -9,7 +9,7 @@
 (ns uio.fs.s3
   (:require [uio.impl :refer :all]
             [clojure.string :as str])
-  (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider]
+  (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider DefaultAWSCredentialsProviderChain]
            [com.amazonaws.internal StaticCredentialsProvider]
            [com.amazonaws.services.s3 AmazonS3Client]
            [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList AmazonS3Exception]
@@ -23,13 +23,14 @@
   (subs (or (path url) "_") 1))
 
 (defn ^AWSCredentialsProvider ->creds-provider [url]
-  (let [{:keys [access secret role-arn] :as creds} (url->creds url)
-        _     (if-not access (die-creds-key-not-found :access url creds))
-        _     (if-not secret (die-creds-key-not-found :secret url creds))
-        bawsc (BasicAWSCredentials. access secret)]
-    (if role-arn
-      (STSAssumeRoleSessionCredentialsProvider. bawsc ^String role-arn "uio-s3-session")
-      (StaticCredentialsProvider. bawsc))))
+  (let [{:keys [access secret role-arn] :as creds} (url->creds url)]
+    (if (and access
+             secret)
+      (let [bawsc (BasicAWSCredentials. access secret)]
+        (if role-arn
+          (STSAssumeRoleSessionCredentialsProvider. bawsc ^String role-arn "uio-s3-session")
+          (StaticCredentialsProvider. bawsc)))
+      (DefaultAWSCredentialsProviderChain/getInstance))))
 
 (defn with-client-bucket-key [url c-b-k->x]
   (try-with url
