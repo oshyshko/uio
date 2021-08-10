@@ -52,17 +52,11 @@
       (if (exists? url)
         (.addResource c (URL. url))))
     
-    (.set c "hadoop.security.authentication" "kerberos")
+    (.set c "hadoop.security.authentication" "simple") ; https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SecureMode.html
 
     (UserGroupInformation/setConfiguration c)
 
     ; only use keytab creds if either user or keytab path was specified, otherwise rely on default auth (e.g. if ran from kinit/Yarn)
-    (when (or principal keytab-path)
-      (UserGroupInformation/loginUserFromKeytab principal keytab-path)
-
-      ; TODO is there a way to provide more information about the failure?
-      (if-not (UserGroupInformation/isLoginKeytabBased)
-        (die "Could not authenticate. Wrong or missing keytab?")))
 
     c))
 
