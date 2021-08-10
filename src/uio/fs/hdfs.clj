@@ -52,7 +52,7 @@
       (if (exists? url)
         (.addResource c (URL. url))))
     
-    (.set c "hadoop.security.authentication" "simple") ; https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SecureMode.html
+    (.set c "hadoop.security.authentication" "simple") ; https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SecureMode.html#Common_Configurations
 
     (UserGroupInformation/setConfiguration c)
 
