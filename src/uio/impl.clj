@@ -255,7 +255,7 @@
                  (update :principal nie)
                  (update :keytab #(ensure-url :keytab (nie %))))
       creds)))
-      
+
 (defn url->creds [url]
   (url->creds' *config* (into {} (System/getenv)) url))
 
