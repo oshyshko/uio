@@ -14,7 +14,6 @@
            [uio.fs S3$S3OutputStream]
            [java.nio.file NoSuchFileException]))
 
-
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter (escape-path k)))
 
