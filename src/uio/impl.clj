@@ -255,10 +255,18 @@
 
     ; if hdfs, replace empty strings with nil (required for proper work of HDFS API) + change path to URL
     (case (scheme url)
-      "hdfs" (-> creds
-                 (update :principal nie)
-                 (update :keytab #(ensure-url :keytab (nie %))))
-      creds)))
+      ;       <current>                        <current>          <obsolete>                    <obsolete>                  <obsolete>
+      "hdfs" {:principal          (nie (or (cr :principal)     (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL")))
+              :keytab (eu :keytab (nie (or (cr :keytab)        (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))))
+              :access                  (or (cr :access)        (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
+              :secret                  (or (cr :secret)        (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
+
+      "sftp" {:user                    (or (cr :user)          (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")               (die-no-key :user))
+              :known-hosts             (or (cr :known-hosts)   (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")        (die-no-key :known-hosts))
+              :pass                    (or (cr :pass)          (c :sftp.pass)                (e "SFTP_PASS")             (e "SSH_PASS"))
+              :identity                (or (cr :identity)      (c :sftp.identity)            (e "SFTP_IDENTITY")         (e "SSH_PRIVATE_KEY"))
+              :identity-pass           (or (cr :identity-pass) (c :sftp.identity.pass)
+                                                               (c :sftp.identity.passphrase) (e "SFTP_IDENTITY_PASS")    (e "SSH_PASSPHRASE"))})))
 
 (defn url->creds [url]
   (url->creds' *config* (into {} (System/getenv)) url))
