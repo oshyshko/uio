@@ -9,9 +9,7 @@
 (ns uio.fs.s3
   (:require [uio.impl :refer :all]
             [clojure.string :as str])
-  (:import [com.amazonaws.auth BasicAWSCredentials STSAssumeRoleSessionCredentialsProvider AWSCredentialsProvider]
-           [com.amazonaws.internal StaticCredentialsProvider]
-           [com.amazonaws.services.s3 AmazonS3Client]
+  (:import [com.amazonaws.services.s3 AmazonS3ClientBuilder]
            [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList AmazonS3Exception]
            [uio.fs S3$S3OutputStream]
            [java.nio.file NoSuchFileException]))
@@ -22,18 +20,9 @@
 (defn url->key [^String url]
   (subs (or (path url) "_") 1))
 
-(defn ^AWSCredentialsProvider ->creds-provider [url]
-  (let [{:keys [access secret role-arn] :as creds} (url->creds url)
-        _     (if-not access (die-creds-key-not-found :access url creds))
-        _     (if-not secret (die-creds-key-not-found :secret url creds))
-        bawsc (BasicAWSCredentials. access secret)]
-    (if role-arn
-      (STSAssumeRoleSessionCredentialsProvider. bawsc ^String role-arn "uio-s3-session")
-      (StaticCredentialsProvider. bawsc))))
-
 (defn with-client-bucket-key [url c-b-k->x]
   (try-with url
-            #(AmazonS3Client. (->creds-provider url))
+            #(AmazonS3ClientBuilder/defaultClient)
             #(c-b-k->x % (host url) (url->key url))
             #(.shutdown %)))
 
@@ -51,7 +40,7 @@
                                                   (+ start
                                                      (:length opts))
                                                   (dec (Long/MAX_VALUE)))]
-                                      (wrap-is #(AmazonS3Client. (->creds-provider url))
+                                      (wrap-is #(AmazonS3ClientBuilder/defaultClient)
                                                #(.getObjectContent
                                                   (.getObject %
                                                               (.withRange
@@ -60,7 +49,7 @@
                                                                 end)))
                                                #(.shutdown %))))
 
-(defmethod to      :s3 [url & [opts]] (wrap-os #(AmazonS3Client. (->creds-provider url))
+(defmethod to      :s3 [url & [opts]] (wrap-os #(AmazonS3ClientBuilder/defaultClient)
                                                #(S3$S3OutputStream. % (host url) (url->key url) (some-> opts :acl acl->enum))
                                                #(.shutdown %)))
 
@@ -163,7 +152,7 @@
 (defmethod ls      :s3 [url & args] (single-file-or
                                       url
                                       (let [opts (get-opts default-opts-ls url args)
-                                            c    (AmazonS3Client. (->creds-provider url))
+                                            c    (AmazonS3ClientBuilder/defaultClient)
                                             b    (host url)
                                             k    (url->key (ensure-ends-with-delimiter url))]
                                         (cond->> (close-when-realized-or-finalized
