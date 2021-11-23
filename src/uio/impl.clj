@@ -235,7 +235,9 @@
                       (case (scheme url)
                         ;        <current>             <obsolete>                    <obsolete>                  <obsolete>
                         "hdfs" {:principal     (or (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL"))
-                                :keytab        (or (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))}
+                                :keytab        (or (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))
+                                :access        (or (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
+                                :secret        (or (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
 
                         "sftp" {:user          (or (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")              (die-creds-key-not-found :user        url creds))
                                 :known-hosts   (or (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")       (die-creds-key-not-found :known-hosts url creds))

@@ -145,7 +145,9 @@
   ;                                                 :secret "from-config"}
 
   (let [c11 {"hdfs://" {:principal "principal-c11"          ; v1.1
-                        :keytab    "file:///path/to/keytab-c11"}
+                        :keytab    "file:///path/to/keytab-c11"
+                        :access    "access-c11"
+                        :secret    "secret-c11"}
 
              "sftp://" {:user          "user-c11"
                         :known-hosts   "known-hosts-c11"
@@ -156,6 +158,9 @@
         c10 {:hdfs.keytab.principal "principal-c10"         ; v1.0
              :hdfs.keytab.path      "/path/to/keytab-c10"
 
+             :s3.access             "access-c10"
+             :s3.secret             "secret-c10"
+
              :sftp.user             "user-c10"
              :sftp.known-hosts      "known-hosts-c10"
              :sftp.pass             "pass-c10"
@@ -165,6 +170,9 @@
         e10 {"HDFS_KEYTAB_PRINCIPAL" "principal-e10"        ; v1.0
              "HDFS_KEYTAB_PATH"      "/path/to/keytab-e10"
 
+             "AWS_ACCESS"            "access-e10"
+             "AWS_SECRET"            "secret-e10"
+
              "SFTP_USER"             "user-e10"
              "SFTP_KNOWN_HOSTS"      "known-hosts-e10"
              "SFTP_PASS"             "pass-e10"
@@ -173,6 +181,9 @@
 
         e09 {"KEYTAB_PRINCIPAL"      "principal-e09"        ; v0.9
              "KEYTAB_FILE"           "/path/to/keytab-e09"
+
+             "AWS_ACCESS_KEY_ID"     "access-e09"
+             "AWS_SECRET_ACCESS_KEY" "secret-e09"
 
              "SSH_USER"              "user-e09"
              "SSH_KNOWN_HOSTS"       "known-hosts-e09"
@@ -196,7 +207,9 @@
 
     ; c10 works without env and beats e10 and e09
     (let[cr-c10 {"hdfs://" {:principal "principal-c10"
-                            :keytab    "file:///path/to/keytab-c10"}
+                            :keytab    "file:///path/to/keytab-c10"
+                            :access    "access-c10"
+                            :secret    "secret-c10"}
 
                  "sftp://" {:user          "user-c10"
                             :known-hosts   "known-hosts-c10"
@@ -215,7 +228,9 @@
 
     ; e10 works without config and beats e09
     (let [cr-e10 {"hdfs://" {:principal "principal-e10"
-                             :keytab    "file:///path/to/keytab-e10"}
+                             :keytab    "file:///path/to/keytab-e10"
+                             :access    "access-e10"
+                             :secret    "secret-e10"}
 
                   "sftp://" {:user          "user-e10"
                              :known-hosts   "known-hosts-e10"
@@ -231,7 +246,9 @@
 
     ; e09 works without config
     (let [cr-e09 {"hdfs://" {:principal "principal-e09"
-                             :keytab    "file:///path/to/keytab-e09"}
+                             :keytab    "file:///path/to/keytab-e09"
+                             :access    "access-e09"
+                             :secret    "secret-e09"}
 
                   "sftp://" {:user          "user-e09"
                              :known-hosts   "known-hosts-e09"
@@ -243,8 +260,8 @@
       (url->creds' {} e09 "sftp://") => (cr-e09 "sftp://")))
 
   ; ensure nil is never returned
-  (url->creds' {}               {} "hdfs:///") => {:keytab nil, :principal nil}
-  (url->creds' {"hdfs:///" nil} {} "hdfs:///") => {:keytab nil, :principal nil}
+  (url->creds' {}               {} "hdfs:///") => {:access nil :keytab nil :principal nil :secret nil}
+  (url->creds' {"hdfs:///" nil} {} "hdfs:///") => {:access nil, :keytab nil, :principal nil, :secret nil}
   (url->creds' {"hdfs:///" {}}  {} "hdfs:///") => {:keytab nil, :principal nil})
 
 (facts "Deducing of (de)compression codecs works, even for chained ones"
