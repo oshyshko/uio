@@ -29,8 +29,6 @@
   (let [c           (Configuration.)
         creds       (url->creds url)
 
-        principal   (:principal creds)
-        keytab-path (some-> (:keytab creds) path)
         aws-access  (:access creds)
         aws-secret  (:secret creds)]
 
@@ -51,12 +49,8 @@
                  "file:///etc/hadoop/conf/hdfs-site.xml"]]
       (if (exists? url)
         (.addResource c (URL. url))))
-    
-    (.set c "hadoop.security.authentication" "simple") ; https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SecureMode.html#Common_Configurations
 
     (UserGroupInformation/setConfiguration c)
-
-    ; only use keytab creds if either user or keytab path was specified, otherwise rely on default auth (e.g. if ran from kinit/Yarn)
 
     c))
 
