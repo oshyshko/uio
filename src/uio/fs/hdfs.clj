@@ -33,15 +33,12 @@
         aws-secret  (:secret creds)]
 
     (when (and aws-access aws-secret)
-      (.set c "fs.s3a.impl"               "org.apache.hadoop.fs.s3a.S3AFileSystem")
       (.set c "fs.s3a.access.key"         aws-access)
       (.set c "fs.s3a.secret.key"         aws-secret)
 
-      (.set c "fs.s3n.impl"               "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
       (.set c "fs.s3n.awsAccessKeyId"     aws-access)
       (.set c "fs.s3n.awsSecretAccessKey" aws-secret)
 
-      (.set c "fs.s3.impl"                "org.apache.hadoop.fs.s3.S3FileSystem")
       (.set c "fs.s3.awsAccessKeyId"      aws-access)
       (.set c "fs.s3.awsSecretAccessKey"  aws-secret))
 
