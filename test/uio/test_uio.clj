@@ -70,7 +70,7 @@
   (parent-of "file:///path")                                     => "file:///"
   (parent-of "file:///")                                         => nil
   (parent-of "file://")                                          => nil
-  
+
   (parent-of "/path/to/file.txt")                                => (throws #"Expected a scheme")
   (parent-of "path/to/file.txt")                                 => (throws #"Expected a scheme")
 
@@ -103,7 +103,7 @@
   (replace-path "fs://user@host:123/path/to/file.txt" nil)       => "fs://user@host:123"
   (replace-path "fs://user@host:123/path/to/file.txt?a=b" "")    => "fs://user@host:123?a=b"
   (replace-path "fs://host/path/to/file.txt" "file.txt")         => (throws #"Expected argument")
-  
+
   (ensure-not-ends-with-delimiter "fs:///")                      => "fs:///"
   (ensure-not-ends-with-delimiter "fs:///test/")                 => "fs:///test"
   (ensure-not-ends-with-delimiter "fs:///test///")               => "fs:///test"
@@ -148,10 +148,6 @@
                         :keytab    "file:///path/to/keytab-c11"
                         :access    "access-c11"
                         :secret    "secret-c11"}
-
-             "s3://"   {:access   "access-c11"
-                        :secret   "secret-c11"
-                        :role-arn "role-arn-c11"}
 
              "sftp://" {:user          "user-c11"
                         :known-hosts   "known-hosts-c11"
@@ -198,19 +194,15 @@
     ; c11 works without env and beats c10, e10 and e09
     (let[ cr-c11 c11]
       (url->creds' c11 {} "hdfs://")             => (cr-c11 "hdfs://")
-      (url->creds' c11 {} "s3://")               => (cr-c11 "s3://")
       (url->creds' c11 {} "sftp://")             => (cr-c11 "sftp://")
 
       (url->creds' (merge c11 c10) {} "hdfs://") => (cr-c11 "hdfs://")
-      (url->creds' (merge c11 c10) {} "s3://")   => (cr-c11 "s3://")
       (url->creds' (merge c11 c10) {} "sftp://") => (cr-c11 "sftp://")
 
       (url->creds' c11 e09 "hdfs://")            => (cr-c11 "hdfs://")
-      (url->creds' c11 e09 "s3://")              => (cr-c11 "s3://")
       (url->creds' c11 e09 "sftp://")            => (cr-c11 "sftp://")
 
       (url->creds' c11 e10 "hdfs://")            => (cr-c11 "hdfs://")
-      (url->creds' c11 e10 "s3://")              => (cr-c11 "s3://")
       (url->creds' c11 e10 "sftp://")            => (cr-c11 "sftp://"))
 
     ; c10 works without env and beats e10 and e09
@@ -219,10 +211,6 @@
                             :access    "access-c10"
                             :secret    "secret-c10"}
 
-                 "s3://"   {:access   "access-c10"
-                            :secret   "secret-c10"
-                            :role-arn nil}
-
                  "sftp://" {:user          "user-c10"
                             :known-hosts   "known-hosts-c10"
                             :pass          "pass-c10"
@@ -230,15 +218,12 @@
                             :identity-pass "identity-pass-c10"}}]
 
       (url->creds' c10 {} "hdfs://")  => (cr-c10 "hdfs://")
-      (url->creds' c10 {} "s3://")    => (cr-c10 "s3://")
       (url->creds' c10 {} "sftp://")  => (cr-c10 "sftp://")
 
       (url->creds' c10 e09 "hdfs://") => (cr-c10 "hdfs://")
-      (url->creds' c10 e09 "s3://")   => (cr-c10 "s3://")
       (url->creds' c10 e09 "sftp://") => (cr-c10 "sftp://")
 
       (url->creds' c10 e10 "hdfs://") => (cr-c10 "hdfs://")
-      (url->creds' c10 e10 "s3://")   => (cr-c10 "s3://")
       (url->creds' c10 e10 "sftp://") => (cr-c10 "sftp://"))
 
     ; e10 works without config and beats e09
@@ -247,10 +232,6 @@
                              :access    "access-e10"
                              :secret    "secret-e10"}
 
-                  "s3://"   {:access   "access-e10"
-                             :secret   "secret-e10"
-                             :role-arn nil}
-
                   "sftp://" {:user          "user-e10"
                              :known-hosts   "known-hosts-e10"
                              :pass          "pass-e10"
@@ -258,11 +239,9 @@
                              :identity-pass "identity-pass-e10"}}]
 
       (url->creds' {} e10 "hdfs://")              => (cr-e10 "hdfs://")
-      (url->creds' {} e10 "s3://")                => (cr-e10 "s3://")
       (url->creds' {} e10 "sftp://")              => (cr-e10 "sftp://")
 
       (url->creds' {} (merge e10 e09) "hdfs://")  => (cr-e10 "hdfs://")
-      (url->creds' {} (merge e10 e09) "s3://")    => (cr-e10 "s3://")
       (url->creds' {} (merge e10 e09) "sftp://")  => (cr-e10 "sftp://"))
 
     ; e09 works without config
@@ -271,10 +250,6 @@
                              :access    "access-e09"
                              :secret    "secret-e09"}
 
-                  "s3://"   {:access   "access-e09"
-                             :secret   "secret-e09"
-                             :role-arn nil}
-
                   "sftp://" {:user          "user-e09"
                              :known-hosts   "known-hosts-e09"
                              :pass          "pass-e09"
@@ -282,11 +257,10 @@
                              :identity-pass "identity-pass-e09"}}]
 
       (url->creds' {} e09 "hdfs://") => (cr-e09 "hdfs://")
-      (url->creds' {} e09 "s3://")   => (cr-e09 "s3://")
       (url->creds' {} e09 "sftp://") => (cr-e09 "sftp://")))
 
   ; ensure nil is never returned
-  (url->creds' {}               {} "hdfs:///") => {:access nil, :keytab nil, :principal nil, :secret nil}
+  (url->creds' {}               {} "hdfs:///") => {:access nil :keytab nil :principal nil :secret nil}
   (url->creds' {"hdfs:///" nil} {} "hdfs:///") => {:access nil, :keytab nil, :principal nil, :secret nil}
   (url->creds' {"hdfs:///" {}}  {} "hdfs:///") => {:keytab nil, :principal nil})
 
