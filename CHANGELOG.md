@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2] - unreleased
+## [1.2] - 2021-12-06
 ### Fixed
 - proper escaping of ` `, `+` and `%` in `file://`, `hdfs://`, `s3://` and `sftp://`
 - don't lookup credentials from env (compatibility with v1.0) when there is a matching url in configuration
