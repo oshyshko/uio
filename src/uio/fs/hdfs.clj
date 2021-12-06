@@ -29,21 +29,16 @@
   (let [c           (Configuration.)
         creds       (url->creds url)
 
-        principal   (:principal creds)
-        keytab-path (some-> (:keytab creds) path)
         aws-access  (:access creds)
         aws-secret  (:secret creds)]
 
     (when (and aws-access aws-secret)
-      (.set c "fs.s3a.impl"               "org.apache.hadoop.fs.s3a.S3AFileSystem")
       (.set c "fs.s3a.access.key"         aws-access)
       (.set c "fs.s3a.secret.key"         aws-secret)
 
-      (.set c "fs.s3n.impl"               "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
       (.set c "fs.s3n.awsAccessKeyId"     aws-access)
       (.set c "fs.s3n.awsSecretAccessKey" aws-secret)
 
-      (.set c "fs.s3.impl"                "org.apache.hadoop.fs.s3.S3FileSystem")
       (.set c "fs.s3.awsAccessKeyId"      aws-access)
       (.set c "fs.s3.awsSecretAccessKey"  aws-secret))
 
@@ -51,18 +46,8 @@
                  "file:///etc/hadoop/conf/hdfs-site.xml"]]
       (if (exists? url)
         (.addResource c (URL. url))))
-    
-    (.set c "hadoop.security.authentication" "kerberos")
 
     (UserGroupInformation/setConfiguration c)
-
-    ; only use keytab creds if either user or keytab path was specified, otherwise rely on default auth (e.g. if ran from kinit/Yarn)
-    (when (or principal keytab-path)
-      (UserGroupInformation/loginUserFromKeytab principal keytab-path)
-
-      ; TODO is there a way to provide more information about the failure?
-      (if-not (UserGroupInformation/isLoginKeytabBased)
-        (die "Could not authenticate. Wrong or missing keytab?")))
 
     c))
 

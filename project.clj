@@ -1,10 +1,18 @@
 (defproject uio/uio "1.2-SNAPSHOT"
   :description "uio is a Clojure library and a command line tool for accessing HDFS, S3, SFTP and other file systems."
 
-  :repositories {"cloudera" "https://repository.cloudera.com/content/groups/cdh-releases-rcs"}
+  :repositories {"cloudera"  "https://repository.cloudera.com/content/groups/cdh-releases-rcs"
+                 "foursquare"  {:url      "https://foursquaredev.jfrog.io/foursquaredev/fsnexus"
+                                :username :env/MVN_USERNAME :password :env/MVN_PASSWORD}}
 
-  :deploy-repositories [["clojars" {:url           "https://clojars.org/repo/"
-                                    :sign-releases false}]]
+  :deploy-repositories {"snapshots" {:id          "foursquare"
+                                     :url         "https://foursquaredev.jfrog.io/foursquaredev/fsfactual-snapshots-local"
+                                     :username :env/MVN_USERNAME :password :env/MVN_PASSWORD
+                                     :sign-releases false}
+                        "releases"  {:id          "foursquare"
+                                     :url         "https://foursquaredev.jfrog.io/foursquaredev/fsfactual-releases-local"
+                                     :username :env/MVN_USERNAME :password :env/MVN_PASSWORD
+                                     :sign-releases false}}
 
   :dependencies [[org.clojure/clojure "1.9.0"]
 
