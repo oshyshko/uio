@@ -1,4 +1,4 @@
-(defproject uio/uio "1.3-SNAPSHOT"
+(defproject uio/uio "1.2.1-SNAPSHOT"
   :description "uio is a Clojure library and a command line tool for accessing HDFS, S3, SFTP and other file systems."
 
   :repositories {"cloudera"  "https://repository.cloudera.com/content/groups/cdh-releases-rcs"
@@ -16,8 +16,8 @@
 
   :dependencies [[org.clojure/clojure "1.9.0"]
 
-                 [com.amazonaws/aws-java-sdk-s3 "1.12.31"] ; s3
-                 [com.amazonaws/aws-java-sdk-sts "1.12.31"] ; s3 with roles
+                 [com.amazonaws/aws-java-sdk-s3 "1.12.125"] ; s3
+                 [com.amazonaws/aws-java-sdk-sts "1.12.125"] ; s3 with roles
                  [org.apache.httpcomponents/httpclient "4.5.6"] ; (needed by `aws-java-sdk-s3`)
 
                  [com.jcraft/jsch "0.1.54"]                 ; sftp
@@ -55,4 +55,4 @@
   ; A trick to prevent IntelliJ from resetting compiler/module version to "1.5"
   :pom-plugins [[org.apache.maven.plugins/maven-compiler-plugin "3.6.1"
                  [:configuration ([:source "1.8"]
-                                   [:target "1.8"])]]])
+                                  [:target "1.8"])]]])

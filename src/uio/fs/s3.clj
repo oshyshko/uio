@@ -20,9 +20,14 @@
 (defn url->key [^String url]
   (subs (or (path url) "_") 1))
 
+(defn client-for-url [^String url]
+  (-> (AmazonS3ClientBuilder/standard)
+      (.withForceGlobalBucketAccessEnabled true)
+      (.build)))
+
 (defn with-client-bucket-key [url c-b-k->x]
   (try-with url
-            #(AmazonS3ClientBuilder/defaultClient)
+            #(client-for-url url)
             #(c-b-k->x % (host url) (url->key url))
             #(.shutdown %)))
 
@@ -40,7 +45,7 @@
                                                   (+ start
                                                      (:length opts))
                                                   (dec (Long/MAX_VALUE)))]
-                                      (wrap-is #(AmazonS3ClientBuilder/defaultClient)
+                                      (wrap-is #(client-for-url url)
                                                #(.getObjectContent
                                                   (.getObject %
                                                               (.withRange
@@ -49,7 +54,7 @@
                                                                 end)))
                                                #(.shutdown %))))
 
-(defmethod to      :s3 [url & [opts]] (wrap-os #(AmazonS3ClientBuilder/defaultClient)
+(defmethod to      :s3 [url & [opts]] (wrap-os #(client-for-url url)
                                                #(S3$S3OutputStream. % (host url) (url->key url) (some-> opts :acl acl->enum))
                                                #(.shutdown %)))
 
@@ -152,7 +157,7 @@
 (defmethod ls      :s3 [url & args] (single-file-or
                                       url
                                       (let [opts (get-opts default-opts-ls url args)
-                                            c    (AmazonS3ClientBuilder/defaultClient)
+                                            c    (client-for-url url)
                                             b    (host url)
                                             k    (url->key (ensure-ends-with-delimiter url))]
                                         (cond->> (close-when-realized-or-finalized
