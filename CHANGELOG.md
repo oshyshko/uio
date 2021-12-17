@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+### Changed
+- S3 fs checks for configured access and secret overrides again.
+
 ## [1.2] - 2021-12-06
 ### Fixed
 - proper escaping of ` `, `+` and `%` in `file://`, `hdfs://`, `s3://` and `sftp://`
