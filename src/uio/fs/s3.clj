@@ -12,7 +12,8 @@
   (:import [com.amazonaws.services.s3 AmazonS3ClientBuilder]
            [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing S3ObjectSummary GetObjectRequest CannedAccessControlList AmazonS3Exception]
            [uio.fs S3$S3OutputStream]
-           [java.nio.file NoSuchFileException]))
+           [java.nio.file NoSuchFileException]
+           (com.amazonaws.auth BasicAWSCredentials AWSStaticCredentialsProvider)))
 
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter (escape-path k)))
@@ -21,9 +22,13 @@
   (subs (or (path url) "_") 1))
 
 (defn client-for-url [^String url]
-  (-> (AmazonS3ClientBuilder/standard)
-      (.withForceGlobalBucketAccessEnabled true)
-      (.build)))
+  (let [client-builder (AmazonS3ClientBuilder/standard)
+        {:keys [access secret]} (url->creds url)]
+    (when (and access secret)
+      (.withCredentials client-builder (AWSStaticCredentialsProvider. (BasicAWSCredentials. access secret))))
+    (.withForceGlobalBucketAccessEnabled client-builder true)
+    (.build client-builder)))
+
 
 (defn with-client-bucket-key [url c-b-k->x]
   (try-with url
