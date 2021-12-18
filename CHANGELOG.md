@@ -1,7 +1,10 @@
 # Changelog
 
 ## Unreleased
+
+## [1.2.1] - 2021-12-17
 ### Changed
+- Force ability to use bucket in any region.
 - S3 fs checks for configured access and secret overrides again.
 
 ## [1.2] - 2021-12-06
