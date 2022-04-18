@@ -19,7 +19,7 @@
                   :exclusions [org.apache.httpcomponents/httpcore]] ; conflicts with `aws-java-sdk-s3`
                  [org.apache.hadoop/hadoop-hdfs "2.10.1"]
 
-                 [org.apache.commons/commons-compress "1.15"] ; bzip2, xz
+                 [org.apache.commons/commons-compress "1.21"] ; bzip2, xz
                  [org.tukaani/xz "1.8"]                     ; xz (needed by `commons-compress`)
 
                  [org.clojure/tools.cli "0.3.5"]]           ; main
