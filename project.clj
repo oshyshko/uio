@@ -15,11 +15,11 @@
                  [com.jcraft/jsch "0.1.54"]                 ; sftp
                  [com.jcraft/jzlib "1.1.3"]                 ; (needed by `jsch`)
 
-                 [org.apache.hadoop/hadoop-common "2.8.1"   ; hdfs -- 3.0.0 is there, but doesn't have HTTPS repo
+                 [org.apache.hadoop/hadoop-common "2.10.1"  ; hdfs -- 3.0.0 is there, but doesn't have HTTPS repo
                   :exclusions [org.apache.httpcomponents/httpcore]] ; conflicts with `aws-java-sdk-s3`
-                 [org.apache.hadoop/hadoop-hdfs "2.8.1"]
+                 [org.apache.hadoop/hadoop-hdfs "2.10.1"]
 
-                 [org.apache.commons/commons-compress "1.15"] ; bzip2, xz
+                 [org.apache.commons/commons-compress "1.21"] ; bzip2, xz
                  [org.tukaani/xz "1.8"]                     ; xz (needed by `commons-compress`)
 
                  [org.clojure/tools.cli "0.3.5"]]           ; main
