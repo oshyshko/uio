@@ -82,7 +82,6 @@
 
         s (.getSession j user (host url) (or (port url) 22)) ; ^Session
         _ (.setTimeout s (:connection-timeout *sft-connection-config*))
-        _ (println (str "Connection timeout is " (:connection-timeout *sft-connection-config*)))
         _ (.setConfig s "StrictHostKeyChecking" (if known-hosts "yes" "now"))
         _ (.setPassword s pass)
         _ (.connect s)
