@@ -20,7 +20,7 @@
                  [com.amazonaws/aws-java-sdk-sts "1.12.300"] ; s3 with roles
                  [org.apache.httpcomponents/httpclient "4.5.13"] ; (needed by `aws-java-sdk-s3`)
 
-                 [com.jcraft/jsch "0.1.54"]                 ; sftp
+                 [com.jcraft/jsch "0.1.55"]                 ; sftp
                  [com.jcraft/jzlib "1.1.3"]                 ; (needed by `jsch`)
 
                  [org.apache.hadoop/hadoop-common "2.8.1"   ; hdfs (API) note: 3.1.1 is available, but it can't find HDFS impl
