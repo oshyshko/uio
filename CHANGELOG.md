@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## [1.2.2] - 2022-9-16
 ### Added
 - SFTP fs now allows configuration of the connection timeout: `(uio.fs.sftp/with-sftp-configs {:connection-timeout 10000} #(uio/to* to-url))`  
 ### Changed
