@@ -3,6 +3,8 @@
 ## Unreleased
 ### Added
 - SFTP fs now allows configuration of the connection timeout: `(uio.fs.sftp/with-sftp-configs {:connection-timeout 10000} #(uio/to* to-url))`  
+### Changed
+- Upgrade AWS SDK to 1.12.300
 
 ## [1.2.1] - 2021-12-17
 ### Changed
