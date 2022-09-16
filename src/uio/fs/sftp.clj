@@ -28,13 +28,13 @@
 
 (def default-timeout-ms 10000)
 
-(def ^:dynamic *sft-connection-config* {:connection-timeout default-timeout-ms})
+(def ^:dynamic *sftp-connection-config* {:connection-timeout default-timeout-ms})
 
 (defn with-sftp-configs [config f]
   (if-not (instance? IPersistentMap config)
     (die (str "Argument `config` expected to be a map, but was " (.getName (class config)))))
 
-  (binding [*sft-connection-config* (merge *sft-connection-config* config)]
+  (binding [*sftp-connection-config* (merge *sftp-connection-config* config)]
     (f)))
 
 ; JSch expects a private key with new-line characters as described in RFC-4716.
@@ -81,7 +81,7 @@
                           (.getBytes (or identity-pass ""))))
 
         s (.getSession j user (host url) (or (port url) 22)) ; ^Session
-        _ (.setTimeout s (:connection-timeout *sft-connection-config*))
+        _ (.setTimeout s (:connection-timeout *sftp-connection-config*))
         _ (.setConfig s "StrictHostKeyChecking" (if known-hosts "yes" "now"))
         _ (.setPassword s pass)
         _ (.connect s)
