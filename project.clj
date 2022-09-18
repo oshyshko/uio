@@ -1,8 +1,6 @@
 (defproject uio/uio "1.2-SNAPSHOT"
   :description "uio is a Clojure library and a command line tool for accessing HDFS, S3, SFTP and other file systems."
 
-  :repositories {"cloudera" "https://repository.cloudera.com/content/groups/cdh-releases-rcs"}
-
   :deploy-repositories [["clojars" {:url           "https://clojars.org/repo/"
                                     :sign-releases false}]]
 
