@@ -21,6 +21,7 @@
 
                  [org.clojure/tools.cli "1.0.206"]]         ; main
 
+  :jar-exclusions [#".*\.java"]
   :java-source-paths ["src"]
   :javac-options ["-source" "1.8"
                   "-target" "1.8"
