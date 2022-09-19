@@ -1,6 +1,20 @@
 # Changelog
 
-## [1.2] - unreleased
+## Unreleased
+
+## [1.2.2] - 2022-9-16
+### Added
+- SFTP fs now allows configuration of the connection timeout: `(uio.fs.sftp/with-sftp-configs {:connection-timeout 10000} #(uio/to* to-url))`  
+### Changed
+- Upgrade AWS SDK to 1.12.300
+- Upgrade jsch to 0.1.55
+
+## [1.2.1] - 2021-12-17
+### Changed
+- Force ability to use bucket in any region.
+- S3 fs checks for configured access and secret overrides again.
+
+## [1.2] - 2021-12-06
 ### Fixed
 - proper escaping of ` `, `+` and `%` in `file://`, `hdfs://`, `s3://` and `sftp://`
 - don't lookup credentials from env (compatibility with v1.0) when there is a matching url in configuration

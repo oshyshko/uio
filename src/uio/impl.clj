@@ -222,29 +222,15 @@
         c           (or config {})                          ; config -- for compatibility, credentials stored as keys
         e           (or env {})                             ; env    -- for compatibility, comes from JVM process (immutable, extracted as arg for testing)
 
-        nie         (fn [s] (if (str/blank? s) nil s))      ; nil-if-empty
-
-        ensure-url  (fn [k url-or-path]                     ; ensure-url
-                      (cond (nil? url-or-path) nil
-                            (str/starts-with? url-or-path default-delimiter) (str "file://" url-or-path)
-                            (url? url-or-path) url-or-path
-                            :else (die (str "Expected URL or path that starts with / for " k ", but got: " url-or-path))))
-
         creds       (if creds                               ; so it's the latest "url -> creds" version
                       creds
                       (case (scheme url)
                         ;        <current>             <obsolete>                    <obsolete>                  <obsolete>
-                        "hdfs" {:principal     (or (c :hdfs.keytab.principal)    (e "HDFS_KEYTAB_PRINCIPAL") (e "KEYTAB_PRINCIPAL"))
-                                :keytab        (or (c :hdfs.keytab.path)         (e "HDFS_KEYTAB_PATH")      (e "KEYTAB_FILE"))
-                                :access        (or (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
+                        "hdfs" {:access        (or (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID"))
                                 :secret        (or (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY"))}
 
-                        "s3"   {:access        (or (c :s3.access)                (e "AWS_ACCESS")            (e "AWS_ACCESS_KEY_ID")     (die-creds-key-not-found :access url creds))
-                                :secret        (or (c :s3.secret)                (e "AWS_SECRET")            (e "AWS_SECRET_ACCESS_KEY") (die-creds-key-not-found :secret url creds))
-                                :role-arn      nil}
-
-                        "sftp" {:user          (or (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER")              (die-creds-key-not-found :user        url creds))
-                                :known-hosts   (or (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS")       (die-creds-key-not-found :known-hosts url creds))
+                        "sftp" {:user          (or (c :sftp.user)                (e "SFTP_USER")             (e "SSH_USER"))
+                                :known-hosts   (or (c :sftp.known-hosts)         (e "SFTP_KNOWN_HOSTS")      (e "SSH_KNOWN_HOSTS"))
                                 :pass          (or (c :sftp.pass)                (e "SFTP_PASS")             (e "SSH_PASS"))
                                 :identity      (or (c :sftp.identity)            (e "SFTP_IDENTITY")         (e "SSH_PRIVATE_KEY"))
                                 :identity-pass (or (c :sftp.identity.pass)
@@ -252,13 +238,7 @@
                         {}))]
     ; TODO post-validate pairs?
     ; TODO fail on unknown keys in `cr`?
-
-    ; if hdfs, replace empty strings with nil (required for proper work of HDFS API) + change path to URL
-    (case (scheme url)
-      "hdfs" (-> creds
-                 (update :principal nie)
-                 (update :keytab #(ensure-url :keytab (nie %))))
-      creds)))
+    creds))
 
 (defn url->creds [url]
   (url->creds' *config* (into {} (System/getenv)) url))

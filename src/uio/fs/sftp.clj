@@ -23,9 +23,19 @@
   (:import [com.jcraft.jsch JSch ChannelSftp Session SftpException SftpATTRS Channel]
            [java.io ByteArrayInputStream]
            [java.util.zip GZIPOutputStream GZIPInputStream]
-           [java.util Date]))
+           [java.util Date]
+           (clojure.lang IPersistentMap)))
 
 (def default-timeout-ms 10000)
+
+(def ^:dynamic *sftp-connection-config* {:connection-timeout default-timeout-ms})
+
+(defn with-sftp-configs [config f]
+  (if-not (instance? IPersistentMap config)
+    (die (str "Argument `config` expected to be a map, but was " (.getName (class config)))))
+
+  (binding [*sftp-connection-config* (merge *sftp-connection-config* config)]
+    (f)))
 
 ; JSch expects a private key with new-line characters as described in RFC-4716.
 ; However, it's useful  to pass private keys around as a single-line string where new-lines are replaced with space.
@@ -71,7 +81,7 @@
                           (.getBytes (or identity-pass ""))))
 
         s (.getSession j user (host url) (or (port url) 22)) ; ^Session
-        _ (.setTimeout s default-timeout-ms)
+        _ (.setTimeout s (:connection-timeout *sftp-connection-config*))
         _ (.setConfig s "StrictHostKeyChecking" (if known-hosts "yes" "now"))
         _ (.setPassword s pass)
         _ (.connect s)
@@ -140,7 +150,7 @@
 (defmethod copy    :sftp [from-url to-url & args] (try-with to-url
                                                             #(->session+channel to-url)
                                                             (fn [[_ c]]
-                                                              (with-open [is (from from-url)]
+                                                              (with-open [is (from from-url args)]
                                                                 (.put c is (path to-url))))
                                                             (fn [[s c]]
                                                               (.disconnect c)
