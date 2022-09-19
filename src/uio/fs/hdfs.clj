@@ -13,7 +13,8 @@
 (ns uio.fs.hdfs
   (:require [clojure.string :as str]
             [uio.fs.file]
-            [uio.impl :refer :all])
+            [uio.impl :refer :all]
+            [me.raynes.fs :as fs])
   (:import [java.io IOException]
            [java.net URL]
            [java.util Iterator Date]
@@ -49,9 +50,16 @@
 
     (doseq [url ["file:///etc/hadoop/conf/core-site.xml"
                  "file:///etc/hadoop/conf/hdfs-site.xml"]]
-      (if (exists? url)
+      (when (exists? url)
         (.addResource c (URL. url))))
-    
+
+    (when-let [hcd (System/getenv "HADOOP_CONF_DIR")]
+      (doseq [url (map #(str/join ["file://" (fs/absolute hcd) "/" %])
+                       ["core-site.xml" "hdfs-site.xml"])]
+        (when (exists? url)
+          (.addResource c (URL. url))
+          )))
+
     (.set c "hadoop.security.authentication" "kerberos")
 
     (UserGroupInformation/setConfiguration c)
