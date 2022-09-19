@@ -16,6 +16,7 @@
 
                  [org.apache.hadoop/hadoop-common "3.3.2"]
                  [org.apache.hadoop/hadoop-hdfs "3.3.2"]
+                 [org.apache.hadoop/hadoop-hdfs-client "3.3.2"]
 
                  [org.apache.commons/commons-compress "1.21"] ; bzip2, xz
                  [org.tukaani/xz "1.9"]                     ; xz (needed by `commons-compress`)
