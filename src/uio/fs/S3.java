@@ -86,11 +86,6 @@ public class S3 {
                 PartETag remotePartEtag = c.uploadPart(upr).getPartETag();
                 tags.add(remotePartEtag);
 
-                if (!remotePartEtag.getETag().equals(localPartEtag)) {
-                    throw new RuntimeException("Part ETags don't match:\n" +
-                            " - local : " + localPartEtag + "\n" +
-                            " - remote: " + remotePartEtag.getETag());
-                }
 
                 partIndex++;
             } catch (Exception e) {
@@ -120,10 +115,6 @@ public class S3 {
                 }
                 String localEtag = hex(localPartDigest.digest()) + "-" + partIndex;
 
-                if (!localEtag.equals(remoteEtag))
-                    throw new RuntimeException("Etags don't match:\n" +
-                            " - local : " + localEtag + "\n" +
-                            " - remote: " + remoteEtag);
             } catch (Exception e) {
                 abort(); // TODO delete remote file if exception happened after `c.completeMultipartUpload(...)`
                 throw e;
