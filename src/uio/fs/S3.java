@@ -81,7 +81,6 @@ public class S3 {
         private void _flush(boolean isLastPart) throws IOException {
             partOutputStream.close();
 
-            String localPartEtag = hex(partDigest.digest());
             try {
                 UploadPartRequest upr = new UploadPartRequest()
                         .withBucketName(init.getBucketName())
@@ -119,15 +118,12 @@ public class S3 {
                             " - read   : " + read + "\n" +
                             " - written: " + written);
 
-                String remoteEtag = c.completeMultipartUpload(
-                        new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags)
-                ).getETag();
+                c.completeMultipartUpload(new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags));
 
                 partDigest.reset();
                 for (PartETag tag : tags) {
                     partDigest.update(unhex(tag.getETag()));
                 }
-                String localEtag = hex(partDigest.digest()) + "-" + partIndex;
 
             } catch (Exception e) {
                 abort(); // TODO delete remote file if exception happened after `c.completeMultipartUpload(...)`
