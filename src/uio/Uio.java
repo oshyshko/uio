@@ -3,6 +3,7 @@ package uio;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
 import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -25,12 +26,13 @@ public class Uio {
     private static final IFn SIZE   = var("uio.uio/size");
     private static final IFn EXISTS = var("uio.uio/exists?");
     private static final IFn DELETE = var("uio.uio/delete");
-    private static final IFn COPY   = var("uio.uio/copy");
-    private static final IFn LS     = var("uio.uio/ls");
     private static final IFn MKDIR  = var("uio.uio/mkdir");
+    private static final IFn COPY   = var("uio.uio/copy");
+    private static final IFn ATTRS  = var("uio.uio/attrs");
+    private static final IFn LS     = var("uio.uio/ls");
 
     public static InputStream       from(String url)                           { return (InputStream)   FROM.invoke(url); }
-    public static InputStream       from(String url, Map<String, Object> opts) { return (InputStream)   FROM.invoke(url, s2o_k2o(opts)); }
+    public static InputStream       from(String url, Map<String, Object> opts) { return (InputStream)   FROM.invoke(url, PersistentArrayMap.create(s2o_k2o(opts))); }
     public static InputStream       from(String url, long offset, long length) { return from(url, opts().offset(offset).length(length)); }
 
     public static InputStream decodeFrom(String url)                           { return (InputStream) FROM_S.invoke(url); }
@@ -41,11 +43,11 @@ public class Uio {
     public static void            delete(String url)                           {                      DELETE.invoke(url); }
     public static void             mkdir(String url)                           {                       MKDIR.invoke(url); }
     public static void              copy(String fromUrl, String toUrl)         {                        COPY.invoke(fromUrl, toUrl); }
+    public static void             attrs(String url)                           {                       ATTRS.invoke(url); }
     public static Iterable<Entry>     ls(String url)                           { return ls(url, opts()); }
-    public static Iterable<Entry>     ls(String url, Map<String, Object> opts) { return ((List<Map<Keyword, Object>>) LS.invoke(url, s2o_k2o(opts)))
+    public static Iterable<Entry>     ls(String url, Map<String, Object> opts) { return ((List<Map<Keyword, Object>>) LS.invoke(url, PersistentArrayMap.create(s2o_k2o(opts))))
                                                                                         .stream()
                                                                                         .map(Uio::k2o_entry)::iterator; }
-
     private static Map<String, Object>  k2o_s2o(Map<Keyword, ?> k2o) { return k2o.entrySet().stream().collect(Collectors.toMap(kv -> kv.getKey().getName(),       Map.Entry::getValue));}
     private static Map<Keyword, Object> s2o_k2o(Map<String, ?>  s2o) { return s2o.entrySet().stream().collect(Collectors.toMap(kv -> Keyword.intern(kv.getKey()), Map.Entry::getValue));}
 
@@ -53,19 +55,17 @@ public class Uio {
         Map<String, Object> s2o = k2o_s2o(k2o);
 
         String url     = (String) s2o.get("url");
-        boolean isFile = Boolean.TRUE.equals(s2o.get("file"));
         boolean isDir  = Boolean.TRUE.equals(s2o.get("dir"));
-        Number size    = (Number) s2o.get("size");
+        Long size      = (Long) s2o.get("size");
 
         s2o.remove("url");
-        s2o.remove("file");
         s2o.remove("dir");
         s2o.remove("size");
 
         return new Entry(url,
-                isFile,
+                !isDir,
                 isDir,
-                size != null ? (long) size : -1,
+                size != null ? size : -1,
                 Collections.unmodifiableMap(s2o));
     }
 
