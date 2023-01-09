@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## [1.2.3] - 2023-01-09
 ### Fixed
 - S3OutputStream no longer validates a Multipart Upload's ETag against its MD5 digest, according to [this](https://stackoverflow.com/a/53886736). [DEL-2151](https://foursquare.atlassian.net/browse/DEL-2151)
 
