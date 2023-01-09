@@ -29,7 +29,6 @@ public class S3 {
 
         private final MessageDigest inDigest = MessageDigest.getInstance("MD5");
         private final MessageDigest outDigest = MessageDigest.getInstance("MD5");
-        private final MessageDigest partDigest = MessageDigest.getInstance("MD5");
 
         private final File partTempFile;
         private Streams.StatsableOutputStream partOutputStream;
@@ -65,7 +64,6 @@ public class S3 {
                 // append to buffer
                 partOutputStream.write(bs, offset, bytesToCopy);
 
-                partDigest.update(bs, offset, bytesToCopy);
                 outDigest.update(bs, offset, bytesToCopy);
 
                 offset += bytesToCopy;
@@ -81,7 +79,6 @@ public class S3 {
         private void _flush(boolean isLastPart) throws IOException {
             partOutputStream.close();
 
-            String localPartEtag = hex(partDigest.digest());
             try {
                 UploadPartRequest upr = new UploadPartRequest()
                         .withBucketName(init.getBucketName())
@@ -95,13 +92,7 @@ public class S3 {
                 PartETag remotePartEtag = c.uploadPart(upr).getPartETag();
                 tags.add(remotePartEtag);
 
-                if (!remotePartEtag.getETag().equals(localPartEtag)) {
-                    throw new RuntimeException("Part ETags don't match:\n" +
-                            " - local : " + localPartEtag + "\n" +
-                            " - remote: " + remotePartEtag.getETag());
-                }
 
-                partDigest.reset();
                 partOutputStream = new Streams.StatsableOutputStream(new FileOutputStream(partTempFile));
                 partIndex++;
             } catch (Exception e) {
@@ -124,20 +115,8 @@ public class S3 {
                             " - read   : " + read + "\n" +
                             " - written: " + written);
 
-                String remoteEtag = c.completeMultipartUpload(
-                        new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags)
-                ).getETag();
+                c.completeMultipartUpload(new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags));
 
-                partDigest.reset();
-                for (PartETag tag : tags) {
-                    partDigest.update(unhex(tag.getETag()));
-                }
-                String localEtag = hex(partDigest.digest()) + "-" + partIndex;
-
-                if (!localEtag.equals(remoteEtag))
-                    throw new RuntimeException("Etags don't match:\n" +
-                            " - local : " + localEtag + "\n" +
-                            " - remote: " + remoteEtag);
             } catch (Exception e) {
                 abort(); // TODO delete remote file if exception happened after `c.completeMultipartUpload(...)`
                 throw e;
