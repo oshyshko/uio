@@ -29,7 +29,6 @@ public class S3 {
 
         private final MessageDigest inDigest = MessageDigest.getInstance("MD5");
         private final MessageDigest outDigest = MessageDigest.getInstance("MD5");
-        private final MessageDigest partDigest = MessageDigest.getInstance("MD5");
 
         private final File partTempFile;
         private Streams.StatsableOutputStream partOutputStream;
@@ -65,7 +64,6 @@ public class S3 {
                 // append to buffer
                 partOutputStream.write(bs, offset, bytesToCopy);
 
-                partDigest.update(bs, offset, bytesToCopy);
                 outDigest.update(bs, offset, bytesToCopy);
 
                 offset += bytesToCopy;
@@ -95,7 +93,6 @@ public class S3 {
                 tags.add(remotePartEtag);
 
 
-                partDigest.reset();
                 partOutputStream = new Streams.StatsableOutputStream(new FileOutputStream(partTempFile));
                 partIndex++;
             } catch (Exception e) {
@@ -119,11 +116,6 @@ public class S3 {
                             " - written: " + written);
 
                 c.completeMultipartUpload(new CompleteMultipartUploadRequest(init.getBucketName(), init.getKey(), init.getUploadId(), tags));
-
-                partDigest.reset();
-                for (PartETag tag : tags) {
-                    partDigest.update(unhex(tag.getETag()));
-                }
 
             } catch (Exception e) {
                 abort(); // TODO delete remote file if exception happened after `c.completeMultipartUpload(...)`
