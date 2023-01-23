@@ -4,8 +4,10 @@
 ;     ^^^ triple slash
 ;
 (ns uio.fs.res
-  (:require [uio.impl :refer :all])
-  (:import (clojure.java.api Clojure)))
+  (:require
+    [uio.impl :refer :all])
+  (:import (clojure.java.api Clojure)
+           (java.io File)))
 
 (defn assert-res-url [url]
   (if (host url)
@@ -20,3 +22,15 @@
 (defmethod exists? :res [url & args] (if (.getResource Clojure (path (assert-res-url url)))
                                        true
                                        false))
+
+(defmethod ls :res [url & args]
+  (->>
+    (.substring (path (normalize url)) 1)                   ; get path and remove leading slash
+    (.getResources (.getClassLoader Clojure))               ; Multiple resources can have the same name
+    (enumeration-seq)
+    (map #(File. (.getPath %)))
+    (map #(if (.isFile %)
+            %
+            (seq (.listFiles %))))
+    (flatten)                                               ; If it's a directory, flatten the list of files.
+    (map #(do {:url (str "file://" %)}))))                  ; expected format is a list of maps

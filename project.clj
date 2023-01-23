@@ -40,6 +40,7 @@
                   "-target" "1.8"
                   "-Xlint:deprecation"
                   "-Xlint:unchecked"]
+  :resource-paths ["resources"]
 
   :profiles {:dev {:dependencies [[midje "1.9.2"]]
                    :plugins      [[lein-midje "3.2.1"]]}}
