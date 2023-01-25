@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## [1.2.4] - 2023-01-25
 ### Added
 - Support for listing in resource filesystem.
 
