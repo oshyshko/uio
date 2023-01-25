@@ -19,7 +19,7 @@ Features:
 |[hdfs](#hdfs)     |  •  |  •  |  •  |   •   |  •   |  •  |  •  |  •  |`hdfs://[host]/path/to/file.txt`        |
 |[http(s)](#https) |  •  |     |:cat:| :cat: |      |     |     |     |`http[s]://host[:port]/path/to/file.txt`|
 |[mem](#mem)       |  •  |  •  |  •  |   •   |  •   |  •  |  •  |  •  |`mem:///path/to/file.txt`               |
-|[res](#res)       |  •  |     |     |   •   |      |     |     |     |`res:///com/mypackage/file.txt`         |
+|[res](#res)       |  •  |     |     |   •   |      |     |  •  |     |`res:///com/mypackage/file.txt`         |
 |[s3](#s3)         |  •  |  •  |  •  |   •   |  •   |:dog:|  •  |  •  |`s3://bucket/key/with/slashes.txt`      |
 |[sftp](#sftp)     |  •  |:bug:|  •  |   •   |:pig: |  •  |  •  |  •  |`sftp://host[:port]/path/to/file.txt`   |
 
