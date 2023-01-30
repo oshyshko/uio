@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## [1.2.5] - 2023-01-30
 ### Added
 - Size field when listing in resource filesystem.
 
