@@ -144,9 +144,7 @@
   ;                                                 :access "from-config"
   ;                                                 :secret "from-config"}
 
-  (let [c11 {"hdfs://" {:principal "principal-c11"          ; v1.1
-                        :keytab    "file:///path/to/keytab-c11"
-                        :access    "access-c11"
+  (let [c11 {"hdfs://" {:access    "access-c11"
                         :secret    "secret-c11"}
 
              "sftp://" {:user          "user-c11"
@@ -155,10 +153,7 @@
                         :identity      "identity-c11"
                         :identity-pass "identity-pass-c11"}}
 
-        c10 {:hdfs.keytab.principal "principal-c10"         ; v1.0
-             :hdfs.keytab.path      "/path/to/keytab-c10"
-
-             :s3.access             "access-c10"
+        c10 {:s3.access             "access-c10"
              :s3.secret             "secret-c10"
 
              :sftp.user             "user-c10"
@@ -167,10 +162,7 @@
              :sftp.identity         "identity-c10"
              :sftp.identity.pass    "identity-pass-c10"}
 
-        e10 {"HDFS_KEYTAB_PRINCIPAL" "principal-e10"        ; v1.0
-             "HDFS_KEYTAB_PATH"      "/path/to/keytab-e10"
-
-             "AWS_ACCESS"            "access-e10"
+        e10 {"AWS_ACCESS"            "access-e10"
              "AWS_SECRET"            "secret-e10"
 
              "SFTP_USER"             "user-e10"
@@ -179,10 +171,7 @@
              "SFTP_IDENTITY"         "identity-e10"
              "SFTP_IDENTITY_PASS"    "identity-pass-e10"}
 
-        e09 {"KEYTAB_PRINCIPAL"      "principal-e09"        ; v0.9
-             "KEYTAB_FILE"           "/path/to/keytab-e09"
-
-             "AWS_ACCESS_KEY_ID"     "access-e09"
+        e09 {"AWS_ACCESS_KEY_ID"     "access-e09"
              "AWS_SECRET_ACCESS_KEY" "secret-e09"
 
              "SSH_USER"              "user-e09"
@@ -206,9 +195,7 @@
       (url->creds' c11 e10 "sftp://")            => (cr-c11 "sftp://"))
 
     ; c10 works without env and beats e10 and e09
-    (let[cr-c10 {"hdfs://" {:principal "principal-c10"
-                            :keytab    "file:///path/to/keytab-c10"
-                            :access    "access-c10"
+    (let[cr-c10 {"hdfs://" {:access    "access-c10"
                             :secret    "secret-c10"}
 
                  "sftp://" {:user          "user-c10"
@@ -227,9 +214,7 @@
       (url->creds' c10 e10 "sftp://") => (cr-c10 "sftp://"))
 
     ; e10 works without config and beats e09
-    (let [cr-e10 {"hdfs://" {:principal "principal-e10"
-                             :keytab    "file:///path/to/keytab-e10"
-                             :access    "access-e10"
+    (let [cr-e10 {"hdfs://" {:access    "access-e10"
                              :secret    "secret-e10"}
 
                   "sftp://" {:user          "user-e10"
@@ -245,9 +230,7 @@
       (url->creds' {} (merge e10 e09) "sftp://")  => (cr-e10 "sftp://"))
 
     ; e09 works without config
-    (let [cr-e09 {"hdfs://" {:principal "principal-e09"
-                             :keytab    "file:///path/to/keytab-e09"
-                             :access    "access-e09"
+    (let [cr-e09 {"hdfs://" {:access    "access-e09"
                              :secret    "secret-e09"}
 
                   "sftp://" {:user          "user-e09"
@@ -260,9 +243,9 @@
       (url->creds' {} e09 "sftp://") => (cr-e09 "sftp://")))
 
   ; ensure nil is never returned
-  (url->creds' {}               {} "hdfs:///") => {:access nil :keytab nil :principal nil :secret nil}
-  (url->creds' {"hdfs:///" nil} {} "hdfs:///") => {:access nil, :keytab nil, :principal nil, :secret nil}
-  (url->creds' {"hdfs:///" {}}  {} "hdfs:///") => {:keytab nil, :principal nil})
+  (url->creds' {}               {} "hdfs:///") => {:access nil :secret nil}
+  (url->creds' {"hdfs:///" nil} {} "hdfs:///") => {:access nil :secret nil}
+  (url->creds' {"hdfs:///" {}}  {} "hdfs:///") => {})
 
 (facts "Deducing of (de)compression codecs works, even for chained ones"
   (map first (url->seq-of-ext+s->s ext->is->is "hdfs:///far-away/and/well-archived.xz.bz2.gz")) => [:gz :bz2 :xz]

@@ -8,7 +8,7 @@
 ;  :access          (optional)  S3 access
 ;  :secret          (optional)  S3 secret
 ;
-;  NOTE: to use `kinit` isntead of keytab file, pass empty creds (`{}` or all nil values)
+;  NOTE: to use `kinit` instead of keytab file, pass empty creds (`{}` or all nil values)
 ;
 (ns uio.fs.hdfs
   (:require [clojure.string :as str]
