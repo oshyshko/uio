@@ -33,4 +33,4 @@
             %
             (seq (.listFiles %))))
     (flatten)                                               ; If it's a directory, flatten the list of files.
-    (map #(do {:url (str "file://" %)}))))                  ; expected format is a list of maps
+    (map #(do {:url (str "file://" %) :size (.length %)}))))                  ; expected format is a list of maps
